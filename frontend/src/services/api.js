@@ -81,6 +81,16 @@ export const forensicApi = {
     return response.data;
   },
 
+  analyzeDocument: async (file, { signal } = {}) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post('/api/v1/analyze/document', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      signal,
+    });
+    return response.data;
+  },
+
   analyzeMultimodal: async (image, video, audio, { signal } = {}) => {
     const formData = new FormData();
     if (image) formData.append('image', image);

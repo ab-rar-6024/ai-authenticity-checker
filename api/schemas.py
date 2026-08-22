@@ -173,6 +173,51 @@ class MultimodalAnalysisResponse(BaseModel):
 
 
 # ──────────────────────────────────────────────
+# Document / ID Analysis
+# ──────────────────────────────────────────────
+
+class DocumentExifResponse(BaseModel):
+    has_exif: bool = False
+    suspicious: bool = False
+    suspicion_score: float = 0.0
+    findings: list[str] = Field(default_factory=list)
+    camera_make: Optional[str] = None
+    camera_model: Optional[str] = None
+    software: Optional[str] = None
+
+
+class DocumentAnalysisResult(ProofyxBase):
+    id: str = ""
+    timestamp: str = ""
+    risk_score: float = Field(ge=0, le=1)
+    risk_percent: float = Field(ge=0, le=100)
+    verdict: str
+    confidence: str
+    risk_level: str = ""
+    primary_finding: str = ""
+    ai_generated_likely: bool = False
+    ai_generated_score: float = 0.0
+    manipulation_likely: bool = False
+    manipulation_score: float = 0.0
+    checks: dict[str, str] = Field(default_factory=dict)
+    ela_score: float = 0.0
+    noise_consistency_score: float = 0.0
+    copy_move_score: float = 0.0
+    copy_move_matches: int = 0
+    evidence: dict[str, Any] = Field(default_factory=dict)
+    exif: Optional[DocumentExifResponse] = None
+    has_c2pa: bool = False
+    processing_time_ms: float = 0.0
+    media_type: str = "document"
+
+
+class DocumentAnalysisResponse(BaseModel):
+    success: bool
+    data: Optional[DocumentAnalysisResult] = None
+    error: Optional[str] = None
+
+
+# ──────────────────────────────────────────────
 # History
 # ──────────────────────────────────────────────
 

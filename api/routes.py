@@ -23,6 +23,7 @@ from slowapi.util import get_remote_address
 
 from api.schemas import (
     AudioAnalysisResponse, AudioAnalysisResult,
+    DocumentAnalysisResponse, DocumentAnalysisResult,
     HealthResponse,
     HistoryEntry, HistoryListResponse,
     ImageAnalysisResponse, ImageAnalysisResult,
@@ -31,7 +32,7 @@ from api.schemas import (
     VideoAnalysisResponse, VideoAnalysisResult,
 )
 from core.pipeline import (
-    analyze_audio, analyze_image, analyze_multimodal,
+    analyze_audio, analyze_document, analyze_image, analyze_multimodal,
     analyze_video, get_registry,
 )
 from core.auth import get_current_user
@@ -227,6 +228,54 @@ async def api_analyze_image(
     return ImageAnalysisResponse(
         success=True,
         data=ImageAnalysisResult(id=analysis_id, timestamp=timestamp, **fields),
+    )
+
+
+@router.post("/analyze/document", response_model=DocumentAnalysisResponse)
+@limiter.limit("30/minute")
+async def api_analyze_document(
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: Optional[dict] = Depends(get_current_user),
+):
+    """Analyze an uploaded document/ID/receipt/certificate image for AI
+    generation or digital tampering. Image formats only in this version -
+    PDFs would need a rasterization step (pdf2image/poppler) not yet
+    wired in."""
+    contents = await _read_validated(file, MAX_IMAGE_SIZE, ALLOWED_IMAGE_EXT)
+
+    try:
+        image = Image.open(io.BytesIO(contents)).convert("RGB")
+    except (OSError, ValueError, Image.DecompressionBombError):
+        raise HTTPException(status_code=400, detail="Invalid image file")
+
+    suffix = ".jpg"
+    if file.filename:
+        suffix = "." + file.filename.rsplit(".", 1)[-1]
+
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(contents)
+            tmp_path = tmp.name
+
+        result = await _run_with_timeout(
+            analyze_document, TIMEOUT_IMAGE, image, file_path=tmp_path,
+        )
+    finally:
+        _safe_tmp_remove(tmp_path)
+
+    if result.get("error"):
+        return DocumentAnalysisResponse(success=False, error=result["error"])
+
+    user_id = current_user["id"] if current_user else None
+    analysis_id, timestamp, fields = await _save_and_build_response(
+        result, file.filename or "", user_id, DocumentAnalysisResult,
+    )
+
+    return DocumentAnalysisResponse(
+        success=True,
+        data=DocumentAnalysisResult(id=analysis_id, timestamp=timestamp, **fields),
     )
 
 

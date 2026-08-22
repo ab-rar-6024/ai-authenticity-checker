@@ -15,6 +15,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const ImageAnalysis = lazy(() => import('./pages/ImageAnalysis'));
 const VideoAnalysis = lazy(() => import('./pages/VideoAnalysis'));
 const AudioAnalysis = lazy(() => import('./pages/AudioAnalysis'));
+const DocumentAnalysis = lazy(() => import('./pages/DocumentAnalysis'));
 const Multimodal = lazy(() => import('./pages/Multimodal'));
 const History = lazy(() => import('./pages/History'));
 const SystemStatus = lazy(() => import('./pages/SystemStatus'));
@@ -84,6 +85,7 @@ function App() {
             <Route path="image" element={<Suspense fallback={<PageLoader />}><ImageAnalysis /></Suspense>} />
             <Route path="video" element={<Suspense fallback={<PageLoader />}><VideoAnalysis /></Suspense>} />
             <Route path="audio" element={<Suspense fallback={<PageLoader />}><AudioAnalysis /></Suspense>} />
+            <Route path="document" element={<Suspense fallback={<PageLoader />}><DocumentAnalysis /></Suspense>} />
             <Route path="multimodal" element={<Suspense fallback={<PageLoader />}><Multimodal /></Suspense>} />
             <Route path="history" element={<Suspense fallback={<PageLoader />}><History /></Suspense>} />
             <Route path="system" element={<Suspense fallback={<PageLoader />}><SystemStatus /></Suspense>} />

@@ -70,6 +70,7 @@ const useForensicStore = create((set) => ({
   imageAnalysis: createAnalysisSlice(),
   videoAnalysis: createAnalysisSlice(),
   audioAnalysis: createAnalysisSlice(),
+  documentAnalysis: createAnalysisSlice(),
   multimodalAnalysis: createAnalysisSlice(),
 
   // Pending file from drag-drop on Dashboard
@@ -145,6 +146,29 @@ const useForensicStore = create((set) => ({
       useToastStore.getState().addToast(extractError(err), 'error');
     } finally {
       abortControllers.delete('audio');
+    }
+  },
+
+  runDocumentAnalysis: async (file) => {
+    abortControllers.get('document')?.abort();
+    const controller = new AbortController();
+    abortControllers.set('document', controller);
+    set({ documentAnalysis: { isAnalyzing: true, results: null, error: null } });
+    try {
+      const data = await forensicApi.analyzeDocument(file, { signal: controller.signal });
+      if (data.success) {
+        set({ documentAnalysis: { isAnalyzing: false, results: normalizeResults(data), error: null } });
+        useToastStore.getState().addToast('Document analysis complete', 'success');
+      } else {
+        set({ documentAnalysis: { isAnalyzing: false, results: null, error: data.error || 'Analysis failed' } });
+        useToastStore.getState().addToast(data.error || 'Document analysis failed', 'error');
+      }
+    } catch (err) {
+      if (axios.isCancel(err) || err.name === 'AbortError' || err.name === 'CanceledError') return;
+      set({ documentAnalysis: { isAnalyzing: false, results: null, error: extractError(err) } });
+      useToastStore.getState().addToast(extractError(err), 'error');
+    } finally {
+      abortControllers.delete('document');
     }
   },
 

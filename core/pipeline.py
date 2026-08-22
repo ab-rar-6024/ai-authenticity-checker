@@ -1029,6 +1029,134 @@ def _compute_fusion_weights(modalities: set[str]) -> dict[str, float]:
     return {m: 1.0 / n for m in modalities}
 
 
+# ──────────────────────────────────────────────
+# Document / ID Analysis
+# ──────────────────────────────────────────────
+
+def analyze_document(image_pil: Image.Image, file_path: Optional[str] = None) -> dict[str, Any]:
+    """
+    Analyze a document/ID/receipt/certificate image for AI generation or
+    digital tampering. A distinct question from the portrait pipeline -
+    most document content has no face to align, and the artifacts that
+    matter (splices, recompression seams, copy-move edits) are different
+    from deepfake face artifacts.
+
+    Combines:
+      - CorefakeNet applied to the whole image (no face crop) as a
+        generic "does this look AI-synthesized" signal - a transfer
+        application of a portrait-trained model, not a validated fit
+        for document content, but the only trained-model signal
+        available here.
+      - core_models/document_forensics.py: ELA, noise-grid consistency,
+        copy-move detection (classical CV, no training data needed).
+      - core/metadata.py: EXIF + C2PA (already built, previously unused
+        by any live endpoint).
+
+    Returns plain dict — see docs/ARCHITECTURE.md for schema.
+    """
+    start_time = time.perf_counter()
+    reg = get_registry()
+
+    from core_models.document_forensics import analyze_document_forensics
+    from core.metadata import extract_full_metadata
+    from core.reports import image_to_base64
+
+    img = image_pil.convert("RGB")
+
+    # Generic AI-generation signal (whole image, no face crop)
+    ai_generated_score = 0.0
+    corefakenet = reg.models.get("corefakenet")
+    if corefakenet is not None:
+        with torch.no_grad():
+            cfn_result = corefakenet.predict(img)
+        ai_generated_score = float(cfn_result["final_risk"])
+
+    forensics = analyze_document_forensics(img)
+    manipulation_score = forensics["manipulation_score"]
+
+    metadata = extract_full_metadata(img, file_path=file_path)
+    exif_suspicion = metadata.get("exif_suspicion_score", 0.0)
+
+    # AI-authoring-tool tag in EXIF is direct, strong evidence of
+    # generation - boost ai_generated_score rather than diluting it into
+    # the generic exif_suspicion blend.
+    if metadata.get("exif") and any(
+        "AI software detected" in f for f in metadata.get("exif_findings", [])
+    ):
+        ai_generated_score = max(ai_generated_score, 0.75)
+
+    # Missing/thin metadata is weak, generic evidence - folds into the
+    # manipulation signal rather than driving the verdict on its own.
+    manipulation_score = float(np.clip(
+        manipulation_score + 0.15 * exif_suspicion, 0.0, 1.0,
+    ))
+
+    # Either signal alone is meaningful; averaging would dilute a real
+    # hit from one detector with a quiet reading from the other (the
+    # exact "dilution" failure mode documented for the portrait
+    # ensemble - avoided here on purpose since these two signals
+    # measure genuinely different things).
+    risk_score = max(ai_generated_score, manipulation_score)
+    verdict = Verdict.from_risk_score(risk_score)
+    confidence_enum = Confidence.from_risk_score(risk_score)
+
+    ai_generated_likely = ai_generated_score >= 0.60
+    manipulation_likely = manipulation_score >= 0.60
+
+    if ai_generated_likely and ai_generated_score >= manipulation_score:
+        primary_finding = "AI-GENERATED DOCUMENT SUSPECTED"
+    elif manipulation_likely:
+        primary_finding = "MANIPULATION SUSPECTED"
+    else:
+        primary_finding = "AUTHENTIC DOCUMENT"
+
+    checks = {
+        "ai_generation": "Detected" if ai_generated_likely else "Not detected",
+        "tampering": "Detected" if forensics["ela_score"] >= 0.5 else "Not detected",
+        "copy_move": "Detected" if forensics["copy_move_score"] >= 0.5 else "Not detected",
+        "metadata": "Suspicious" if metadata.get("exif_suspicious") else "Analyzed",
+    }
+
+    evidence: dict[str, Any] = {}
+    try:
+        evidence["ela_map"] = image_to_base64(forensics["ela_map"])
+    except Exception:  # Broad catch: evidence image is supplementary, never fatal
+        pass
+
+    elapsed_ms = (time.perf_counter() - start_time) * 1000
+
+    return {
+        "risk_score": risk_score,
+        "risk_percent": risk_score * 100,
+        "verdict": verdict.value,
+        "confidence": confidence_enum.value,
+        "risk_level": RiskLevel.from_risk_score(risk_score).value,
+        "primary_finding": primary_finding,
+        "ai_generated_likely": ai_generated_likely,
+        "ai_generated_score": ai_generated_score,
+        "manipulation_likely": manipulation_likely,
+        "manipulation_score": manipulation_score,
+        "checks": checks,
+        "ela_score": forensics["ela_score"],
+        "noise_consistency_score": forensics["noise_consistency_score"],
+        "copy_move_score": forensics["copy_move_score"],
+        "copy_move_matches": forensics["copy_move_matches"],
+        "evidence": evidence,
+        "exif": {
+            "has_exif": metadata.get("has_exif", False),
+            "suspicious": metadata.get("exif_suspicious", False),
+            "suspicion_score": exif_suspicion,
+            "findings": metadata.get("exif_findings", []),
+            "camera_make": (metadata.get("exif") or {}).get("camera_make"),
+            "camera_model": (metadata.get("exif") or {}).get("camera_model"),
+            "software": (metadata.get("exif") or {}).get("software"),
+        },
+        "has_c2pa": metadata.get("has_c2pa", False),
+        "processing_time_ms": elapsed_ms,
+        "media_type": "document",
+    }
+
+
 def _empty_result(media_type: str, start_time: float, error: str = "") -> dict[str, Any]:
     """Return empty/error result dict."""
     return {
