@@ -103,6 +103,28 @@ export const forensicApi = {
     return response.data;
   },
 
+  generateComplaint: async (analysis, fileName, complainant) => {
+    const response = await api.post(
+      '/api/v1/complaint/generate',
+      {
+        analysis,
+        file_name: fileName || '',
+        name: complainant.name,
+        phone: complainant.phone || '',
+        email: complainant.email || '',
+        address: complainant.address || '',
+        incident_description: complainant.incidentDescription || '',
+      },
+      { responseType: 'blob' },
+    );
+    const disposition = response.headers['content-disposition'] || '';
+    const match = disposition.match(/filename="?([^"]+)"?/);
+    return {
+      blob: response.data,
+      filename: match ? match[1] : 'cyber_complaint.html',
+    };
+  },
+
   getHistory: async (limit = 20, mediaType = null) => {
     const params = new URLSearchParams({ limit: String(limit) });
     if (mediaType) params.set('media_type', mediaType);

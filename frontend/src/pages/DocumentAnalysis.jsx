@@ -1,10 +1,11 @@
 import React, { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { FileSearch, ShieldCheck, X, Check, AlertTriangle } from 'lucide-react';
+import { FileSearch, ShieldAlert, ShieldCheck, X, Check, AlertTriangle } from 'lucide-react';
 import { fadeUp } from '../utils/animations';
 import useForensicStore from '../store/useForensicStore';
 import PageHeader from '../components/PageHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
+import ComplaintModal from '../components/ComplaintModal';
 import UploadZone from '../components/UploadZone';
 import RiskGauge from '../components/RiskGauge';
 import VerdictCard from '../components/VerdictCard';
@@ -41,6 +42,7 @@ function CheckBadge({ name, value }) {
 export default function DocumentAnalysis() {
   const [file, setFile] = useState(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [complaintOpen, setComplaintOpen] = useState(false);
 
   const { documentAnalysis, runDocumentAnalysis, clearAnalysis } = useForensicStore();
   const { isAnalyzing, results, error } = documentAnalysis;
@@ -166,6 +168,16 @@ export default function DocumentAnalysis() {
 
                 <VerdictCard verdict={results.verdict} riskScore={results.risk_percent} />
 
+                {results.verdict === 'AI-GENERATED' && (
+                  <button
+                    onClick={() => setComplaintOpen(true)}
+                    className="btn-danger w-full py-2.5 text-sm"
+                  >
+                    <ShieldAlert size={15} />
+                    Raise Cyber Crime Complaint
+                  </button>
+                )}
+
                 {results.evidence?.ela_map && (
                   <div>
                     <span className="label-tag mb-2 block">Error Level Analysis (Evidence)</span>
@@ -200,6 +212,13 @@ export default function DocumentAnalysis() {
         confirmLabel="Cancel Analysis"
         onConfirm={handleCancelConfirm}
         onCancel={() => setConfirmCancel(false)}
+      />
+
+      <ComplaintModal
+        open={complaintOpen}
+        onClose={() => setComplaintOpen(false)}
+        analysis={results}
+        fileName={file?.name}
       />
     </motion.div>
   );

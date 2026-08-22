@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Image, Scan, ShieldCheck, X } from 'lucide-react';
+import { Image, Scan, ShieldAlert, ShieldCheck, X } from 'lucide-react';
 import { fadeUp } from '../utils/animations';
 import useForensicStore from '../store/useForensicStore';
 import PageHeader from '../components/PageHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
+import ComplaintModal from '../components/ComplaintModal';
 import UploadZone from '../components/UploadZone';
 import RiskGauge from '../components/RiskGauge';
 import ScoreBar from '../components/ScoreBar';
@@ -29,6 +30,7 @@ export default function ImageAnalysis() {
   const [file, setFile] = useState(null);
   const [mode, setMode] = useState(MODES[0].value);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [complaintOpen, setComplaintOpen] = useState(false);
 
   const {
     systemStatus,
@@ -215,6 +217,16 @@ export default function ImageAnalysis() {
 
                 <VerdictCard verdict={results.verdict} riskScore={results.risk_percent} />
 
+                {results.verdict === 'AI-GENERATED' && (
+                  <button
+                    onClick={() => setComplaintOpen(true)}
+                    className="btn-danger w-full py-2.5 text-sm"
+                  >
+                    <ShieldAlert size={15} />
+                    Raise Cyber Crime Complaint
+                  </button>
+                )}
+
                 {results.explanation && (
                   <div className="p-3 rounded-lg bg-bg-inset border border-border-dim">
                     <span className="label-tag mb-1.5 block">Explanation</span>
@@ -241,6 +253,13 @@ export default function ImageAnalysis() {
         confirmLabel="Cancel Analysis"
         onConfirm={handleCancelConfirm}
         onCancel={() => setConfirmCancel(false)}
+      />
+
+      <ComplaintModal
+        open={complaintOpen}
+        onClose={() => setComplaintOpen(false)}
+        analysis={results}
+        fileName={file?.name}
       />
     </motion.div>
   );

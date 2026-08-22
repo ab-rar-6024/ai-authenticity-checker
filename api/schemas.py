@@ -218,6 +218,24 @@ class DocumentAnalysisResponse(BaseModel):
 
 
 # ──────────────────────────────────────────────
+# Cyber Crime Complaint
+# ──────────────────────────────────────────────
+
+class ComplaintRequest(BaseModel):
+    """Analysis result the client already has in memory, plus complainant
+    details for the generated document. ProofyX only ever produces this
+    document for the user to review and file themselves — see
+    core/cyber_complaint.py."""
+    analysis: dict[str, Any] = Field(default_factory=dict)
+    file_name: str = ""
+    name: str = Field(min_length=1)
+    phone: str = ""
+    email: str = ""
+    address: str = ""
+    incident_description: str = ""
+
+
+# ──────────────────────────────────────────────
 # History
 # ──────────────────────────────────────────────
 

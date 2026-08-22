@@ -17,12 +17,14 @@ from typing import Any, Callable, Optional
 from fastapi import (
     APIRouter, Depends, File, HTTPException, Query, Request, UploadFile,
 )
+from fastapi.responses import Response
 from PIL import Image
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from api.schemas import (
     AudioAnalysisResponse, AudioAnalysisResult,
+    ComplaintRequest,
     DocumentAnalysisResponse, DocumentAnalysisResult,
     HealthResponse,
     HistoryEntry, HistoryListResponse,
@@ -276,6 +278,42 @@ async def api_analyze_document(
     return DocumentAnalysisResponse(
         success=True,
         data=DocumentAnalysisResult(id=analysis_id, timestamp=timestamp, **fields),
+    )
+
+
+@router.post("/complaint/generate")
+@limiter.limit("10/minute")
+async def api_generate_complaint(
+    request: Request,
+    body: ComplaintRequest,
+    current_user: Optional[dict] = Depends(get_current_user),
+):
+    """Generate a cyber crime complaint document from an analysis result
+    already held by the client, for the user to review and file
+    themselves. Never submits anything on the user's behalf — see
+    core/cyber_complaint.py."""
+    from core.cyber_complaint import generate_complaint_document
+
+    complainant = {
+        "name": body.name,
+        "phone": body.phone,
+        "email": body.email,
+        "address": body.address,
+        "incident_description": body.incident_description,
+    }
+
+    try:
+        content, mime_type, filename = generate_complaint_document(
+            body.analysis, complainant, body.file_name,
+        )
+    except Exception as e:  # Broad catch: document generation must never 500 opaquely
+        logger.warning("Complaint document generation failed: %s", e)
+        raise HTTPException(status_code=500, detail="Could not generate complaint document")
+
+    return Response(
+        content=content,
+        media_type=mime_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
