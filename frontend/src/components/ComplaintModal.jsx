@@ -1,57 +1,21 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShieldAlert, X } from 'lucide-react';
-import { forensicApi } from '../services/api';
-import useToastStore from '../store/useToastStore';
+import ComplaintForm from './ComplaintForm';
 
 /**
- * Collects complainant details and generates a downloadable cyber crime
- * complaint document from an analysis result already held in memory.
- * Never submits anything anywhere — only produces a file for the user
- * to review and file themselves.
+ * Modal wrapper around ComplaintForm, opened from an analysis results
+ * panel (already has the analysis + file name in hand). See
+ * pages/CyberComplaint.jsx for the standalone "pick a past analysis
+ * first" version of the same form.
  */
 export default function ComplaintModal({ open, onClose, analysis, fileName }) {
-  const [form, setForm] = useState({
-    name: '', phone: '', email: '', address: '', incidentDescription: '',
-  });
-  const [isGenerating, setIsGenerating] = useState(false);
-  const dialogRef = useRef(null);
-
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (e) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [open, onClose]);
-
-  const handleChange = useCallback((field) => (e) => {
-    setForm((prev) => ({ ...prev, [field]: e.target.value }));
-  }, []);
-
-  const handleGenerate = async (e) => {
-    e.preventDefault();
-    if (!form.name.trim()) return;
-    setIsGenerating(true);
-    try {
-      const { blob, filename } = await forensicApi.generateComplaint(analysis, fileName, form);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-      useToastStore.getState().addToast('Complaint document generated', 'success');
-      onClose();
-    } catch (err) {
-      useToastStore.getState().addToast(
-        err.response?.data?.detail || 'Could not generate complaint document', 'error',
-      );
-    } finally {
-      setIsGenerating(false);
-    }
-  };
 
   return (
     <AnimatePresence>
@@ -73,7 +37,6 @@ export default function ComplaintModal({ open, onClose, analysis, fileName }) {
           />
 
           <motion.div
-            ref={dialogRef}
             className="relative z-10 w-full max-w-md rounded-xl p-6 bg-bg-card border border-border-mid shadow-modal max-h-[90vh] overflow-y-auto"
             initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -105,77 +68,12 @@ export default function ComplaintModal({ open, onClose, analysis, fileName }) {
               </button>
             </div>
 
-            <form onSubmit={handleGenerate} className="space-y-3">
-              <div>
-                <label className="text-xs mb-1 block text-text-2">Full Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={form.name}
-                  onChange={handleChange('name')}
-                  className="field-input text-sm"
-                  placeholder="Your full name"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs mb-1 block text-text-2">Phone</label>
-                  <input
-                    type="tel"
-                    value={form.phone}
-                    onChange={handleChange('phone')}
-                    className="field-input text-sm"
-                    placeholder="Phone number"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs mb-1 block text-text-2">Email</label>
-                  <input
-                    type="email"
-                    value={form.email}
-                    onChange={handleChange('email')}
-                    className="field-input text-sm"
-                    placeholder="Email address"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs mb-1 block text-text-2">Address</label>
-                <textarea
-                  value={form.address}
-                  onChange={handleChange('address')}
-                  rows={2}
-                  className="field-input text-sm resize-none"
-                  placeholder="Your address"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs mb-1 block text-text-2">Incident Description (optional)</label>
-                <textarea
-                  value={form.incidentDescription}
-                  onChange={handleChange('incidentDescription')}
-                  rows={3}
-                  className="field-input text-sm resize-none"
-                  placeholder="Where/how did you encounter this content, and what harm or risk does it pose?"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-1">
-                <button type="button" onClick={onClose} className="btn-ghost text-xs">
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={!form.name.trim() || isGenerating}
-                  className="btn-danger text-xs"
-                >
-                  {isGenerating ? 'Generating…' : 'Generate & Download'}
-                </button>
-              </div>
-            </form>
+            <ComplaintForm
+              analysis={analysis}
+              fileName={fileName}
+              onDone={onClose}
+              onCancel={onClose}
+            />
           </motion.div>
         </div>
       )}
