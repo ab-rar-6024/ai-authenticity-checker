@@ -1033,7 +1033,12 @@ def _compute_fusion_weights(modalities: set[str]) -> dict[str, float]:
 # Document / ID Analysis
 # ──────────────────────────────────────────────
 
-def analyze_document(image_pil: Image.Image, file_path: Optional[str] = None) -> dict[str, Any]:
+def analyze_document(
+    image_pil: Image.Image,
+    file_path: Optional[str] = None,
+    id_type: Optional[str] = None,
+    id_number: Optional[str] = None,
+) -> dict[str, Any]:
     """
     Analyze a document/ID/receipt/certificate image for AI generation or
     digital tampering. A distinct question from the portrait pipeline -
@@ -1051,6 +1056,12 @@ def analyze_document(image_pil: Image.Image, file_path: Optional[str] = None) ->
         copy-move detection (classical CV, no training data needed).
       - core/metadata.py: EXIF + C2PA (already built, previously unused
         by any live endpoint).
+      - core_models/id_validators.py: optional format/checksum check on
+        a user-typed Aadhaar/PAN/Voter ID number (id_type/id_number) -
+        not OCR, the user provides the number printed on the document.
+        Aadhaar has a real public checksum (Verhoeff); PAN/Voter ID only
+        have a documented format, no public checksum - see that module's
+        docstring for why the two are treated differently.
 
     Returns plain dict — see docs/ARCHITECTURE.md for schema.
     """
@@ -1058,6 +1069,7 @@ def analyze_document(image_pil: Image.Image, file_path: Optional[str] = None) ->
     reg = get_registry()
 
     from core_models.document_forensics import analyze_document_forensics
+    from core_models.id_validators import validate_id_number
     from core.metadata import extract_full_metadata
     from core.reports import image_to_base64
 
@@ -1091,6 +1103,15 @@ def analyze_document(image_pil: Image.Image, file_path: Optional[str] = None) ->
         manipulation_score + 0.15 * exif_suspicion, 0.0, 1.0,
     ))
 
+    id_validation = validate_id_number(id_type, id_number)
+    if id_validation is not None and id_validation["valid"] is False and id_type == "aadhaar":
+        # A failed Verhoeff checksum is a real, deterministic defect -
+        # unlike a PAN/Voter ID format mismatch (far more likely to be a
+        # manual-entry typo than evidence of forgery), so this is the
+        # only case that moves the score rather than staying purely
+        # informational in the response.
+        manipulation_score = float(np.clip(manipulation_score + 0.15, 0.0, 1.0))
+
     # Either signal alone is meaningful; averaging would dilute a real
     # hit from one detector with a quiet reading from the other (the
     # exact "dilution" failure mode documented for the portrait
@@ -1116,6 +1137,8 @@ def analyze_document(image_pil: Image.Image, file_path: Optional[str] = None) ->
         "copy_move": "Detected" if forensics["copy_move_score"] >= 0.5 else "Not detected",
         "metadata": "Suspicious" if metadata.get("exif_suspicious") else "Analyzed",
     }
+    if id_validation is not None:
+        checks["id_number"] = "Valid format" if id_validation["valid"] else "Invalid"
 
     evidence: dict[str, Any] = {}
     try:
@@ -1141,6 +1164,7 @@ def analyze_document(image_pil: Image.Image, file_path: Optional[str] = None) ->
         "noise_consistency_score": forensics["noise_consistency_score"],
         "copy_move_score": forensics["copy_move_score"],
         "copy_move_matches": forensics["copy_move_matches"],
+        "id_validation": id_validation,
         "evidence": evidence,
         "exif": {
             "has_exif": metadata.get("has_exif", False),

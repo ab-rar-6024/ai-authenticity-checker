@@ -81,9 +81,11 @@ export const forensicApi = {
     return response.data;
   },
 
-  analyzeDocument: async (file, { signal } = {}) => {
+  analyzeDocument: async (file, idType = '', idNumber = '', { signal } = {}) => {
     const formData = new FormData();
     formData.append('file', file);
+    if (idType) formData.append('id_type', idType);
+    if (idNumber) formData.append('id_number', idNumber);
     const response = await api.post('/api/v1/analyze/document', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       signal,

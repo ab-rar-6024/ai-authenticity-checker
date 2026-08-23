@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
 from fastapi import (
-    APIRouter, Depends, File, HTTPException, Query, Request, UploadFile,
+    APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile,
 )
 from fastapi.responses import Response
 from PIL import Image
@@ -238,12 +238,20 @@ async def api_analyze_image(
 async def api_analyze_document(
     request: Request,
     file: UploadFile = File(...),
+    id_type: Optional[str] = Form(None, pattern="^(aadhaar|pan|voter_id|other)?$"),
+    id_number: Optional[str] = Form(None),
     current_user: Optional[dict] = Depends(get_current_user),
 ):
     """Analyze an uploaded document/ID/receipt/certificate image for AI
     generation or digital tampering. Image formats only in this version -
     PDFs would need a rasterization step (pdf2image/poppler) not yet
-    wired in."""
+    wired in.
+
+    id_type/id_number are optional: when both are provided, the number
+    printed on the document (typed by the user, not OCR'd) is checked
+    against the selected ID type's format/checksum - see
+    core_models/id_validators.py. Neither field is required; omitting
+    them just skips that one signal."""
     contents = await _read_validated(file, MAX_IMAGE_SIZE, ALLOWED_IMAGE_EXT)
 
     try:
@@ -262,7 +270,8 @@ async def api_analyze_document(
             tmp_path = tmp.name
 
         result = await _run_with_timeout(
-            analyze_document, TIMEOUT_IMAGE, image, file_path=tmp_path,
+            analyze_document, TIMEOUT_IMAGE, image,
+            file_path=tmp_path, id_type=id_type, id_number=id_number,
         )
     finally:
         _safe_tmp_remove(tmp_path)

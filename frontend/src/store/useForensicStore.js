@@ -149,13 +149,13 @@ const useForensicStore = create((set) => ({
     }
   },
 
-  runDocumentAnalysis: async (file) => {
+  runDocumentAnalysis: async (file, idType = '', idNumber = '') => {
     abortControllers.get('document')?.abort();
     const controller = new AbortController();
     abortControllers.set('document', controller);
     set({ documentAnalysis: { isAnalyzing: true, results: null, error: null } });
     try {
-      const data = await forensicApi.analyzeDocument(file, { signal: controller.signal });
+      const data = await forensicApi.analyzeDocument(file, idType, idNumber, { signal: controller.signal });
       if (data.success) {
         set({ documentAnalysis: { isAnalyzing: false, results: normalizeResults(data), error: null } });
         useToastStore.getState().addToast('Document analysis complete', 'success');

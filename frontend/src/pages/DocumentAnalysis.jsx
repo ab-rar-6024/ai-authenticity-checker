@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { FileSearch, ShieldAlert, ShieldCheck, X, Check, AlertTriangle } from 'lucide-react';
+import { FileSearch, IdCard, ShieldAlert, ShieldCheck, X, Check, AlertTriangle } from 'lucide-react';
 import { fadeUp } from '../utils/animations';
 import useForensicStore from '../store/useForensicStore';
 import PageHeader from '../components/PageHeader';
@@ -16,9 +16,23 @@ const CHECK_LABELS = {
   tampering: 'Tampering (ELA)',
   copy_move: 'Copy-Move',
   metadata: 'Metadata',
+  id_number: 'ID Number',
 };
 
-const CHECK_OK_VALUES = new Set(['Not detected', 'Analyzed']);
+const CHECK_OK_VALUES = new Set(['Not detected', 'Analyzed', 'Valid format']);
+
+const ID_TYPES = [
+  { value: '', label: 'None / Other document' },
+  { value: 'aadhaar', label: 'Aadhaar' },
+  { value: 'pan', label: 'PAN' },
+  { value: 'voter_id', label: 'Voter ID (EPIC)' },
+];
+
+const ID_PLACEHOLDERS = {
+  aadhaar: 'e.g. 234567890124 (12 digits)',
+  pan: 'e.g. ABCDE1234F',
+  voter_id: 'e.g. ABC1234567',
+};
 
 function CheckBadge({ name, value }) {
   const ok = CHECK_OK_VALUES.has(value);
@@ -41,6 +55,8 @@ function CheckBadge({ name, value }) {
 
 export default function DocumentAnalysis() {
   const [file, setFile] = useState(null);
+  const [idType, setIdType] = useState('');
+  const [idNumber, setIdNumber] = useState('');
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [complaintOpen, setComplaintOpen] = useState(false);
 
@@ -48,7 +64,7 @@ export default function DocumentAnalysis() {
   const { isAnalyzing, results, error } = documentAnalysis;
 
   const handleAnalyze = () => {
-    if (file) runDocumentAnalysis(file);
+    if (file) runDocumentAnalysis(file, idType, idNumber);
   };
 
   const handleCancelRequest = useCallback(() => setConfirmCancel(true), []);
@@ -84,6 +100,49 @@ export default function DocumentAnalysis() {
             AI-image detector applied to the whole document. Not a
             trained document classifier yet — treat results as a first
             pass, same as a &quot;Beta&quot; feature.
+          </div>
+
+          {/* Government ID proof-of-concept */}
+          <div className="card">
+            <div className="flex items-center gap-2 mb-3">
+              <IdCard size={13} className="text-text-3" />
+              <span className="label-tag">ID Number Check (Optional)</span>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs mb-1 block text-text-2">ID Type</label>
+                <select
+                  value={idType}
+                  onChange={(e) => { setIdType(e.target.value); setIdNumber(''); }}
+                  className="field-input text-sm"
+                >
+                  {ID_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {idType && (
+                <div>
+                  <label className="text-xs mb-1 block text-text-2">
+                    {ID_TYPES.find((t) => t.value === idType)?.label} Number
+                  </label>
+                  <input
+                    type="text"
+                    value={idNumber}
+                    onChange={(e) => setIdNumber(e.target.value)}
+                    placeholder={ID_PLACEHOLDERS[idType]}
+                    className="field-input text-sm font-mono"
+                  />
+                  <p className="text-xs mt-1.5 text-text-3">
+                    {idType === 'aadhaar'
+                      ? 'Checked against the real Verhoeff checksum UIDAI uses — not a guess.'
+                      : 'Checked against the standard format only — no public checksum exists for this ID type.'}
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
           {isAnalyzing ? (
@@ -163,6 +222,28 @@ export default function DocumentAnalysis() {
                     {checkEntries.map(([name, value]) => (
                       <CheckBadge key={name} name={name} value={value} />
                     ))}
+                  </div>
+                )}
+
+                {results.id_validation && (
+                  <div
+                    className={`p-3 rounded-lg border text-sm ${
+                      results.id_validation.valid
+                        ? 'bg-risk-clearDim border-[rgba(34,197,94,0.15)]'
+                        : 'bg-risk-cautionDim border-[rgba(250,204,21,0.15)]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      {results.id_validation.valid
+                        ? <Check size={13} className="text-risk-clear" />
+                        : <AlertTriangle size={13} className="text-risk-caution" />}
+                      <span className="font-semibold text-text-1">
+                        {results.id_validation.id_label} Number: {results.id_validation.valid ? 'Valid' : 'Invalid'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-text-2 leading-relaxed">
+                      {results.id_validation.reason}
+                    </p>
                   </div>
                 )}
 

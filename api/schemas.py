@@ -186,6 +186,13 @@ class DocumentExifResponse(BaseModel):
     software: Optional[str] = None
 
 
+class IdValidationResponse(BaseModel):
+    valid: bool
+    reason: str
+    id_type: str
+    id_label: str
+
+
 class DocumentAnalysisResult(ProofyxBase):
     id: str = ""
     timestamp: str = ""
@@ -204,6 +211,7 @@ class DocumentAnalysisResult(ProofyxBase):
     noise_consistency_score: float = 0.0
     copy_move_score: float = 0.0
     copy_move_matches: int = 0
+    id_validation: Optional[IdValidationResponse] = None
     evidence: dict[str, Any] = Field(default_factory=dict)
     exif: Optional[DocumentExifResponse] = None
     has_c2pa: bool = False
