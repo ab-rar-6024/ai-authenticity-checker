@@ -23,9 +23,12 @@ FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
-# System dependencies for OpenCV, audio processing, health check
+# System dependencies for OpenCV, audio processing, health check.
+# libgl1-mesa-glx was a transitional package removed in Debian 13
+# ("trixie", the current python:3.11-slim base) - libgl1 is the actual
+# OpenGL runtime library OpenCV needs (libGL.so.1) on the current base.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
