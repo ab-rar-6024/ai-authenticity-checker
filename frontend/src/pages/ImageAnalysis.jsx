@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Image, Scan, ShieldAlert, ShieldCheck, X } from 'lucide-react';
+import { Image, Scan, Search, ShieldAlert, ShieldCheck, X } from 'lucide-react';
 import { fadeUp } from '../utils/animations';
 import useForensicStore from '../store/useForensicStore';
 import PageHeader from '../components/PageHeader';
@@ -29,6 +29,7 @@ const MODES = [
 export default function ImageAnalysis() {
   const [file, setFile] = useState(null);
   const [mode, setMode] = useState(MODES[0].value);
+  const [reverseSearch, setReverseSearch] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [complaintOpen, setComplaintOpen] = useState(false);
 
@@ -51,8 +52,10 @@ export default function ImageAnalysis() {
     }
   }, [pendingFile, clearPendingFile]);
 
+  const reverseSearchAvailable = systemStatus?.reverse_search_available;
+
   const handleAnalyze = () => {
-    if (file) runImageAnalysis(file, mode);
+    if (file) runImageAnalysis(file, mode, reverseSearchAvailable && reverseSearch);
   };
 
   const handleCancelRequest = useCallback(() => setConfirmCancel(true), []);
@@ -132,6 +135,30 @@ export default function ImageAnalysis() {
                 );
               })}
             </div>
+          </div>
+
+          {/* Reverse image search opt-in */}
+          <div className={`card ${!reverseSearchAvailable ? 'opacity-60' : ''}`}>
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={reverseSearch}
+                onChange={(e) => setReverseSearch(e.target.checked)}
+                disabled={!reverseSearchAvailable}
+                className="mt-0.5"
+              />
+              <div>
+                <p className="text-sm font-semibold flex items-center gap-1.5 text-text-1">
+                  <Search size={13} />
+                  Reverse Image Search
+                </p>
+                <p className="text-xs mt-0.5 text-text-2">
+                  {reverseSearchAvailable
+                    ? 'Cross-reference this image against the public web (Bing Visual Search). Sends the image to a third-party provider.'
+                    : 'Not configured on this server (needs BING_VISUAL_SEARCH_API_KEY).'}
+                </p>
+              </div>
+            </label>
           </div>
 
           {/* Analyze / Cancel buttons */}
@@ -227,6 +254,37 @@ export default function ImageAnalysis() {
                   </button>
                 )}
 
+                {results.reverse_search?.available && (
+                  <div className="p-3 rounded-lg bg-bg-inset border border-border-dim">
+                    <span className="label-tag mb-1.5 block">Reverse Image Search</span>
+                    {results.reverse_search.error ? (
+                      <p className="text-xs text-text-3">Lookup failed: {results.reverse_search.error}</p>
+                    ) : results.reverse_search.match_count === 0 ? (
+                      <p className="text-xs text-text-3">No matching pages found on the public web.</p>
+                    ) : (
+                      <>
+                        <p className="text-xs mb-2 text-text-2">
+                          Found {results.reverse_search.match_count} page(s) hosting this or a visually similar image:
+                        </p>
+                        <ul className="text-sm space-y-1">
+                          {results.reverse_search.matches.map((m, i) => (
+                            <li key={i} className="truncate">
+                              <a
+                                href={m.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-accent hover:underline"
+                              >
+                                {m.title || m.host}
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                  </div>
+                )}
+
                 {results.explanation && (
                   <div className="p-3 rounded-lg bg-bg-inset border border-border-dim">
                     <span className="label-tag mb-1.5 block">Explanation</span>
@@ -243,7 +301,7 @@ export default function ImageAnalysis() {
 
       <HeatmapViewer
         originalFile={file}
-        gradcamBase64={results?.gradcam_image}
+        gradcamBase64={results?.gradcam_overlay}
       />
 
       <ConfirmDialog

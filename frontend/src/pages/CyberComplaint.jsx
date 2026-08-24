@@ -27,7 +27,7 @@ export default function CyberComplaint() {
     fetchHistory(50, null);
   }, [fetchHistory]);
 
-  const flaggedItems = history.filter((item) => item.verdict === 'AI-GENERATED');
+  const flaggedItems = history.filter((item) => item.verdict === 'AI-GENERATED' || item.verdict === 'MANIPULATED');
 
   const handleSelect = async (id) => {
     setSelectedId(id);
@@ -48,7 +48,7 @@ export default function CyberComplaint() {
       <PageHeader
         icon={ShieldAlert}
         title="Cyber Crime Complaint"
-        subtitle="Generate a complaint document from a past AI-generated detection, for you to review and file yourself."
+        subtitle="Generate a complaint document from a past AI-generated or manipulated-document detection, for you to review and file yourself."
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -63,10 +63,10 @@ export default function CyberComplaint() {
           ) : flaggedItems.length === 0 ? (
             <div className="card text-center py-8">
               <ShieldAlert size={20} className="mx-auto mb-2 text-text-3 opacity-40" />
-              <p className="text-sm text-text-2">No AI-generated results yet.</p>
+              <p className="text-sm text-text-2">No flagged results yet.</p>
               <p className="text-xs mt-1 text-text-3">
                 Run an image, video, audio, or document analysis first — anything flagged
-                AI-GENERATED will show up here.
+                AI-GENERATED or MANIPULATED will show up here.
               </p>
             </div>
           ) : (

@@ -6,7 +6,9 @@ Responses follow the envelope pattern: {success, data, error}.
 """
 
 import asyncio
+import base64
 import io
+import json
 import logging
 import os
 import tempfile
@@ -24,7 +26,6 @@ from slowapi.util import get_remote_address
 
 from api.schemas import (
     AudioAnalysisResponse, AudioAnalysisResult,
-    ComplaintRequest,
     DocumentAnalysisResponse, DocumentAnalysisResult,
     HealthResponse,
     HistoryEntry, HistoryListResponse,
@@ -79,8 +80,10 @@ MAGIC_BYTES: dict[str, list[bytes]] = {
     ".tiff": [b"II\x2a\x00", b"MM\x00\x2a"],
 }
 
-# Fields to strip from results before returning to clients
-_STRIP_FIELDS = {"gradcam_image", "original_image"}
+# Fields to strip from results before returning to clients (raw PIL
+# Image objects that were only ever internal - gradcam_overlay carries
+# the actual heatmap out to clients as a base64 data URI instead)
+_STRIP_FIELDS = {"original_image"}
 
 
 def _validate_magic_bytes(contents: bytes, ext: str) -> None:
@@ -163,6 +166,28 @@ async def _run_with_timeout(
         _inference_semaphore.release()
 
 
+async def _maybe_reverse_search(
+    requested: bool, contents: bytes, filename: str,
+) -> Optional[dict[str, Any]]:
+    """Run reverse-image-search corroboration if the client opted in for
+    this request. Not part of _run_with_timeout's GPU semaphore - this is
+    an outbound network call to a third-party provider, unrelated to
+    local inference concurrency, so it gets its own short timeout."""
+    if not requested:
+        return None
+
+    from core_models.reverse_search import reverse_image_search
+
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(reverse_image_search, contents, filename),
+            timeout=20,
+        )
+    except asyncio.TimeoutError:
+        return {"available": True, "provider": "bing_visual_search", "matches": [],
+                "match_count": 0, "error": "timed out"}
+
+
 async def _save_and_build_response(
     pipeline_result: dict[str, Any],
     file_name: str,
@@ -207,6 +232,7 @@ async def api_analyze_image(
     request: Request,
     file: UploadFile = File(...),
     mode: str = Query("ensemble", pattern="^(ensemble|fast)$"),
+    reverse_search: bool = Query(False, description="Opt-in: cross-reference this image against the public web via Bing Visual Search (sends the image to a third-party provider)"),
     current_user: Optional[dict] = Depends(get_current_user),
 ):
     """Analyze an uploaded image for deepfake indicators."""
@@ -221,6 +247,10 @@ async def api_analyze_image(
 
     if result.get("error"):
         return ImageAnalysisResponse(success=False, error=result["error"])
+
+    result["reverse_search"] = await _maybe_reverse_search(
+        reverse_search, contents, file.filename or "image.jpg",
+    )
 
     user_id = current_user["id"] if current_user else None
     analysis_id, timestamp, fields = await _save_and_build_response(
@@ -240,6 +270,7 @@ async def api_analyze_document(
     file: UploadFile = File(...),
     id_type: Optional[str] = Form(None, pattern="^(aadhaar|pan|voter_id|other)?$"),
     id_number: Optional[str] = Form(None),
+    reverse_search: bool = Query(False, description="Opt-in: cross-reference this document against the public web via Bing Visual Search (sends the image to a third-party provider)"),
     current_user: Optional[dict] = Depends(get_current_user),
 ):
     """Analyze an uploaded document/ID/receipt/certificate image for AI
@@ -279,6 +310,10 @@ async def api_analyze_document(
     if result.get("error"):
         return DocumentAnalysisResponse(success=False, error=result["error"])
 
+    result["reverse_search"] = await _maybe_reverse_search(
+        reverse_search, contents, file.filename or "document.jpg",
+    )
+
     user_id = current_user["id"] if current_user else None
     analysis_id, timestamp, fields = await _save_and_build_response(
         result, file.filename or "", user_id, DocumentAnalysisResult,
@@ -290,30 +325,66 @@ async def api_analyze_document(
     )
 
 
+_ID_PROOF_MAX_BYTES = 5 * 1024 * 1024  # matches the real portal's own 5MB cap
+_ID_PROOF_MIME_TYPES = {"image/jpeg", "image/png"}
+
+
 @router.post("/complaint/generate")
 @limiter.limit("10/minute")
 async def api_generate_complaint(
     request: Request,
-    body: ComplaintRequest,
+    analysis: str = Form(...),
+    file_name: str = Form(""),
+    name: str = Form(...),
+    phone: str = Form(""),
+    email: str = Form(""),
+    address: str = Form(""),
+    incident_description: str = Form(""),
+    id_proof: Optional[UploadFile] = File(None),
     current_user: Optional[dict] = Depends(get_current_user),
 ):
     """Generate a cyber crime complaint document from an analysis result
     already held by the client, for the user to review and file
     themselves. Never submits anything on the user's behalf — see
-    core/cyber_complaint.py."""
+    core/cyber_complaint.py.
+
+    Accepts multipart/form-data (rather than a JSON body) so an optional
+    government ID proof image can be attached alongside the fields - the
+    portal itself requires an ID proof upload (Aadhaar/PAN/Passport,
+    JPG/PNG, under 5MB) in Complainant Details, so this mirrors that."""
     from core.cyber_complaint import generate_complaint_document
 
+    if not name.strip():
+        raise HTTPException(status_code=400, detail="name is required")
+
+    try:
+        analysis_dict = json.loads(analysis)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="analysis must be valid JSON")
+
     complainant = {
-        "name": body.name,
-        "phone": body.phone,
-        "email": body.email,
-        "address": body.address,
-        "incident_description": body.incident_description,
+        "name": name,
+        "phone": phone,
+        "email": email,
+        "address": address,
+        "incident_description": incident_description,
     }
+
+    id_proof_payload = None
+    if id_proof is not None:
+        if id_proof.content_type not in _ID_PROOF_MIME_TYPES:
+            raise HTTPException(status_code=400, detail="ID proof must be a JPG or PNG image")
+        raw = await id_proof.read()
+        if len(raw) > _ID_PROOF_MAX_BYTES:
+            raise HTTPException(status_code=400, detail="ID proof must be under 5MB")
+        id_proof_payload = {
+            "data_uri": f"data:{id_proof.content_type};base64,{base64.b64encode(raw).decode('ascii')}",
+            "filename": id_proof.filename or "id_proof",
+        }
 
     try:
         content, mime_type, filename = generate_complaint_document(
-            body.analysis, complainant, body.file_name,
+            analysis_dict, complainant, file_name, id_proof_payload,
         )
     except Exception as e:  # Broad catch: document generation must never 500 opaquely
         logger.warning("Complaint document generation failed: %s", e)
@@ -515,8 +586,13 @@ async def get_analysis(
 @router.get("/models/status", response_model=ModelStatus)
 async def models_status():
     """List loaded models and their status."""
+    from core_models.reverse_search import is_configured as _reverse_search_configured
+
     reg = get_registry()
-    return ModelStatus(**reg.get_status())
+    return ModelStatus(
+        **reg.get_status(),
+        reverse_search_available=_reverse_search_configured(),
+    )
 
 
 @router.get("/health", response_model=HealthResponse)

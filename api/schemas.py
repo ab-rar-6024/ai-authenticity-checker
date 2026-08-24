@@ -78,6 +78,8 @@ class ImageAnalysisResult(ProofyxBase):
     media_type: str = "image"
     explanation: str = ""
     metadata: Optional[dict[str, Any]] = None
+    gradcam_overlay: Optional[str] = None
+    reverse_search: Optional[dict[str, Any]] = None
 
 
 class ImageAnalysisResponse(BaseModel):
@@ -193,6 +195,14 @@ class IdValidationResponse(BaseModel):
     id_label: str
 
 
+class C2paResponse(BaseModel):
+    valid: bool = False
+    validation_state: Optional[str] = None
+    generator: Optional[str] = None
+    ai_generated_signal: bool = False
+    actions: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class DocumentAnalysisResult(ProofyxBase):
     id: str = ""
     timestamp: str = ""
@@ -215,6 +225,8 @@ class DocumentAnalysisResult(ProofyxBase):
     evidence: dict[str, Any] = Field(default_factory=dict)
     exif: Optional[DocumentExifResponse] = None
     has_c2pa: bool = False
+    c2pa: Optional[C2paResponse] = None
+    reverse_search: Optional[dict[str, Any]] = None
     processing_time_ms: float = 0.0
     media_type: str = "document"
 
@@ -223,24 +235,6 @@ class DocumentAnalysisResponse(BaseModel):
     success: bool
     data: Optional[DocumentAnalysisResult] = None
     error: Optional[str] = None
-
-
-# ──────────────────────────────────────────────
-# Cyber Crime Complaint
-# ──────────────────────────────────────────────
-
-class ComplaintRequest(BaseModel):
-    """Analysis result the client already has in memory, plus complainant
-    details for the generated document. ProofyX only ever produces this
-    document for the user to review and file themselves — see
-    core/cyber_complaint.py."""
-    analysis: dict[str, Any] = Field(default_factory=dict)
-    file_name: str = ""
-    name: str = Field(min_length=1)
-    phone: str = ""
-    email: str = ""
-    address: str = ""
-    incident_description: str = ""
 
 
 # ──────────────────────────────────────────────
@@ -275,6 +269,7 @@ class ModelStatus(BaseModel):
     missing: list[str] = Field(default_factory=list)
     total: int = 0
     corefakenet_ready: bool = False
+    reverse_search_available: bool = False
 
 
 class HealthResponse(BaseModel):

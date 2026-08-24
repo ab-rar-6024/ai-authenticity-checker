@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { FileSearch, IdCard, ShieldAlert, ShieldCheck, X, Check, AlertTriangle } from 'lucide-react';
+import { FileSearch, IdCard, Search, ShieldAlert, ShieldCheck, X, Check, AlertTriangle } from 'lucide-react';
 import { fadeUp } from '../utils/animations';
 import useForensicStore from '../store/useForensicStore';
 import PageHeader from '../components/PageHeader';
@@ -57,14 +57,16 @@ export default function DocumentAnalysis() {
   const [file, setFile] = useState(null);
   const [idType, setIdType] = useState('');
   const [idNumber, setIdNumber] = useState('');
+  const [reverseSearch, setReverseSearch] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [complaintOpen, setComplaintOpen] = useState(false);
 
-  const { documentAnalysis, runDocumentAnalysis, clearAnalysis } = useForensicStore();
+  const { systemStatus, documentAnalysis, runDocumentAnalysis, clearAnalysis } = useForensicStore();
   const { isAnalyzing, results, error } = documentAnalysis;
+  const reverseSearchAvailable = systemStatus?.reverse_search_available;
 
   const handleAnalyze = () => {
-    if (file) runDocumentAnalysis(file, idType, idNumber);
+    if (file) runDocumentAnalysis(file, idType, idNumber, reverseSearchAvailable && reverseSearch);
   };
 
   const handleCancelRequest = useCallback(() => setConfirmCancel(true), []);
@@ -143,6 +145,30 @@ export default function DocumentAnalysis() {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Reverse image search opt-in */}
+          <div className={`card ${!reverseSearchAvailable ? 'opacity-60' : ''}`}>
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={reverseSearch}
+                onChange={(e) => setReverseSearch(e.target.checked)}
+                disabled={!reverseSearchAvailable}
+                className="mt-0.5"
+              />
+              <div>
+                <p className="text-sm font-semibold flex items-center gap-1.5 text-text-1">
+                  <Search size={13} />
+                  Reverse Image Search
+                </p>
+                <p className="text-xs mt-0.5 text-text-2">
+                  {reverseSearchAvailable
+                    ? 'Cross-reference this document against the public web (Bing Visual Search). Sends the image to a third-party provider.'
+                    : 'Not configured on this server (needs BING_VISUAL_SEARCH_API_KEY).'}
+                </p>
+              </div>
+            </label>
           </div>
 
           {isAnalyzing ? (
@@ -247,9 +273,51 @@ export default function DocumentAnalysis() {
                   </div>
                 )}
 
+                {results.c2pa && (
+                  <div
+                    className={`p-3 rounded-lg border text-sm ${
+                      results.c2pa.ai_generated_signal
+                        ? 'bg-risk-criticalDim border-[rgba(251,113,133,0.20)]'
+                        : results.c2pa.validation_state === 'Invalid'
+                        ? 'bg-risk-cautionDim border-[rgba(250,204,21,0.15)]'
+                        : results.c2pa.valid
+                        ? 'bg-risk-clearDim border-[rgba(34,197,94,0.15)]'
+                        : 'bg-bg-inset border-border-dim'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      {results.c2pa.ai_generated_signal || results.c2pa.validation_state === 'Invalid' ? (
+                        <AlertTriangle size={13} className={results.c2pa.ai_generated_signal ? 'text-risk-critical' : 'text-risk-caution'} />
+                      ) : (
+                        <Check size={13} className="text-risk-clear" />
+                      )}
+                      <span className="font-semibold text-text-1">
+                        C2PA Content Credentials:{' '}
+                        {results.c2pa.ai_generated_signal
+                          ? 'AI generation declared'
+                          : results.c2pa.validation_state === 'Invalid'
+                          ? 'Tampered'
+                          : results.c2pa.valid
+                          ? 'Verified'
+                          : 'Present, unverified'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-text-2 leading-relaxed">
+                      {results.c2pa.ai_generated_signal
+                        ? 'The embedded manifest itself declares this content was produced by a generative AI tool (digitalSourceType: trainedAlgorithmicMedia).'
+                        : results.c2pa.validation_state === 'Invalid'
+                        ? 'A C2PA manifest is present but its signature failed validation — the provenance chain was altered after signing.'
+                        : results.c2pa.valid
+                        ? 'A signed, valid provenance chain was found with no AI-generation declaration.'
+                        : 'A C2PA manifest is present but could not be fully validated.'}
+                      {results.c2pa.generator && <> Generator: <strong>{results.c2pa.generator}</strong>.</>}
+                    </p>
+                  </div>
+                )}
+
                 <VerdictCard verdict={results.verdict} riskScore={results.risk_percent} />
 
-                {results.verdict === 'AI-GENERATED' && (
+                {results.verdict && results.verdict !== 'AUTHENTIC' && (
                   <button
                     onClick={() => setComplaintOpen(true)}
                     className="btn-danger w-full py-2.5 text-sm"
@@ -267,6 +335,37 @@ export default function DocumentAnalysis() {
                       alt="Error level analysis heatmap"
                       className="w-full rounded-lg border border-border-dim"
                     />
+                  </div>
+                )}
+
+                {results.reverse_search?.available && (
+                  <div className="p-3 rounded-lg bg-bg-inset border border-border-dim">
+                    <span className="label-tag mb-1.5 block">Reverse Image Search</span>
+                    {results.reverse_search.error ? (
+                      <p className="text-xs text-text-3">Lookup failed: {results.reverse_search.error}</p>
+                    ) : results.reverse_search.match_count === 0 ? (
+                      <p className="text-xs text-text-3">No matching pages found on the public web.</p>
+                    ) : (
+                      <>
+                        <p className="text-xs mb-2 text-text-2">
+                          Found {results.reverse_search.match_count} page(s) hosting this or a visually similar image:
+                        </p>
+                        <ul className="text-sm space-y-1">
+                          {results.reverse_search.matches.map((m, i) => (
+                            <li key={i} className="truncate">
+                              <a
+                                href={m.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-accent hover:underline"
+                              >
+                                {m.title || m.host}
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
                   </div>
                 )}
 

@@ -56,7 +56,7 @@ from __future__ import annotations
 import html
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 LEGAL_REFERENCES = [
     ("BNS, 2023 — Section 319", "Cheating by personation (impersonation) — supersedes IPC Section 419"),
@@ -91,6 +91,7 @@ FILING_STEPS = [
     "Go to cybercrime.gov.in and register with your name, state, and an OTP-verified mobile number.",
     "Choose the complaint track that matches Section 1 below (Women/Child or Other Cyber Crime).",
     "Fill the portal's 4-part form: Incident Details, Suspect Details, Complainant Details, then Preview & Submit — copy the corresponding fields from Sections 2-4 below.",
+    "Upload a government ID proof (Aadhaar, PAN, or Passport — JPG/PNG, under 5MB) in Complainant Details. This is mandatory on the portal, not optional.",
     "Attach the original media file and, if useful as supporting evidence, this document, plus any screenshots/links showing where you encountered the content.",
     "Submit to receive an acknowledgement number. Save it — it's required (with OTP) to track your complaint's status afterward.",
 ]
@@ -108,6 +109,7 @@ def build_complaint_html(
     analysis: dict[str, Any],
     complainant: dict[str, Any],
     file_name: str = "",
+    id_proof: Optional[dict[str, Any]] = None,
 ) -> str:
     """
     Build the complaint document as self-contained, printable HTML,
@@ -120,6 +122,10 @@ def build_complaint_html(
             only a handful of common fields are read, so any of them work).
         complainant: {name, phone, email, address, incident_description}
         file_name: original media file name, for the record.
+        id_proof: optional {data_uri, filename} for a government ID proof
+            image (Aadhaar/PAN/Passport) the complainant uploaded — embedded
+            in Section 2 as a visual record, mirroring the portal's own
+            mandatory ID-proof-upload requirement in Complainant Details.
     """
     complaint_id = f"PXC-{uuid.uuid4().hex[:10].upper()}"
 
@@ -158,6 +164,23 @@ def build_complaint_html(
         "[Describe where and how you encountered this content, and any "
         "harm or risk it poses, e.g. impersonation, fraud, harassment.]"
     )
+
+    if id_proof and id_proof.get("data_uri"):
+        id_proof_html = f"""
+  <div class="id-proof-box">
+    <div class="id-proof-label">Government ID Proof Attached — {_esc(id_proof.get('filename', ''))}</div>
+    <img src="{id_proof['data_uri']}" alt="Government ID proof" class="id-proof-img">
+  </div>"""
+    else:
+        id_proof_html = """
+  <div class="id-proof-box id-proof-missing">
+    <div class="id-proof-label">Government ID Proof — not attached</div>
+    <p style="margin:4px 0 0;font-size:0.8rem;color:#8a6d00;">
+      The portal requires a valid ID proof (Aadhaar, PAN, or Passport — JPG/PNG, under 5MB)
+      to be uploaded in Complainant Details. Attach one when filing on the portal, or
+      regenerate this worksheet with an ID proof image attached.
+    </p>
+  </div>"""
 
     return f"""<!doctype html>
 <html>
@@ -201,6 +224,14 @@ def build_complaint_html(
   }}
   .steps-box ol {{ margin: 0; padding-left: 20px; font-size: 0.85rem; }}
   .steps-box li {{ margin: 4px 0; }}
+  .id-proof-box {{
+    margin-top: 10px; padding: 12px 14px; background: #f6faf6;
+    border: 1px solid #cfe8cf; border-radius: 4px;
+  }}
+  .id-proof-box.id-proof-missing {{ background: #fffbea; border-color: #f3e2a0; }}
+  .id-proof-label {{ font-size: 0.8rem; font-weight: 700; color: #2f6b2f; margin-bottom: 6px; }}
+  .id-proof-missing .id-proof-label {{ color: #8a6d00; }}
+  .id-proof-img {{ max-width: 320px; max-height: 220px; display: block; border: 1px solid #ccc; border-radius: 2px; }}
   .disclaimer {{
     margin-top: 32px; padding: 14px 16px; background: #fffbea;
     border: 1px solid #f3e2a0; border-radius: 4px; font-size: 0.8rem; color: #6b5a1e;
@@ -236,6 +267,7 @@ def build_complaint_html(
     <tr><td>Email</td><td class="field-value">{email or '&nbsp;'}</td></tr>
     <tr><td>Address</td><td class="field-value">{address or '&nbsp;'}</td></tr>
   </table>
+  {id_proof_html}
 
   <h2>3. Incident Details <span style="font-weight:400;color:#888;">(portal: Incident Details)</span></h2>
   <p>Media flagged by automated forensic analysis as <strong>likely AI-generated or digitally manipulated</strong>:</p>
@@ -304,6 +336,7 @@ def generate_complaint_document(
     analysis: dict[str, Any],
     complainant: dict[str, Any],
     file_name: str = "",
+    id_proof: Optional[dict[str, Any]] = None,
 ) -> tuple[bytes, str, str]:
     """
     Returns (content_bytes, mime_type, suggested_filename).
@@ -311,7 +344,7 @@ def generate_complaint_document(
     Tries a PDF render via WeasyPrint if installed; otherwise returns the
     print-ready HTML directly (see module docstring).
     """
-    html_doc = build_complaint_html(analysis, complainant, file_name)
+    html_doc = build_complaint_html(analysis, complainant, file_name, id_proof)
 
     try:
         from weasyprint import HTML  # type: ignore

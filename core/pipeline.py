@@ -582,7 +582,7 @@ def _analyze_image_ensemble(
     model_agreement = f"{fake_count}/{active_models} models detect manipulation"
 
     # GradCAM
-    gradcam_img = None
+    gradcam_overlay = None
     try:
         gradcam_img = generate_gradcam_image(
             image_pil, reg.models.get("face"), device,
@@ -590,6 +590,9 @@ def _analyze_image_ensemble(
             eff_model=reg.models.get("efficientnet"),
             dino_model=reg.models.get("dino"),
         )
+        if gradcam_img is not None:
+            from core.reports import image_to_base64
+            gradcam_overlay = image_to_base64(gradcam_img)
     except (RuntimeError, ValueError, TypeError) as e:
         logger.warning("GradCAM failed: %s", e)
 
@@ -626,7 +629,7 @@ def _analyze_image_ensemble(
         "forensic_ml_score": forensic_ml_score,
         "face_detected": has_face,
         "face_aligned": has_face,
-        "gradcam_image": gradcam_img,
+        "gradcam_overlay": gradcam_overlay,
         "original_image": image_pil,
         "models_used": active_models,
         "processing_time_ms": elapsed_ms,
@@ -678,7 +681,7 @@ def _analyze_image_fast(
         explanation = ""
 
     # GradCAM
-    gradcam_img = None
+    gradcam_overlay = None
     try:
         gradcam_img = generate_gradcam_image(
             image_pil, reg.models.get("face"), reg.device,
@@ -686,6 +689,9 @@ def _analyze_image_fast(
             eff_model=reg.models.get("efficientnet"),
             dino_model=reg.models.get("dino"),
         )
+        if gradcam_img is not None:
+            from core.reports import image_to_base64
+            gradcam_overlay = image_to_base64(gradcam_img)
     except (RuntimeError, ValueError, TypeError):
         pass
 
@@ -702,7 +708,7 @@ def _analyze_image_fast(
         "fusion_mode": "corefakenet_attention",
         "face_detected": has_face,
         "face_aligned": has_face,
-        "gradcam_image": gradcam_img,
+        "gradcam_overlay": gradcam_overlay,
         "original_image": image_pil,
         "models_used": 1,
         "processing_time_ms": elapsed_ms,
@@ -1097,11 +1103,31 @@ def analyze_document(
     ):
         ai_generated_score = max(ai_generated_score, 0.75)
 
-    # Missing/thin metadata is weak, generic evidence - folds into the
-    # manipulation signal rather than driving the verdict on its own.
-    manipulation_score = float(np.clip(
-        manipulation_score + 0.15 * exif_suspicion, 0.0, 1.0,
-    ))
+    # C2PA content credentials: a structured, signed provenance chain is
+    # stronger evidence than a free-text EXIF tag in either direction -
+    # see core/metadata.py::check_c2pa for the three cases this covers.
+    c2pa_info = metadata.get("c2pa") or {}
+    if c2pa_info.get("ai_generated_signal"):
+        ai_generated_score = max(ai_generated_score, 0.90)
+    elif c2pa_info.get("validation_state") == "Invalid":
+        manipulation_score = float(np.clip(
+            manipulation_score + c2pa_info.get("trust_boost", 0.0), 0.0, 1.0,
+        ))
+    elif c2pa_info.get("valid"):
+        manipulation_score = float(np.clip(
+            manipulation_score + c2pa_info.get("trust_boost", 0.0), 0.0, 1.0,
+        ))
+
+    # Deliberately NOT folding generic exif_suspicion (missing camera/
+    # timestamp/software/GPS tags) into manipulation_score here: every
+    # photo of a physical document that's been through WhatsApp/a
+    # messaging app - the overwhelmingly common real-world case for this
+    # feature - gets its EXIF stripped by recompression whether the
+    # document is genuine or not, so "no EXIF" is uninformative for
+    # documents specifically (unlike for the general image pipeline,
+    # where it's a real signal). The one exif finding that IS strong,
+    # direct evidence - an AI-authoring-tool tag - is already handled
+    # above by boosting ai_generated_score, not through this path.
 
     id_validation = validate_id_number(id_type, id_number)
     if id_validation is not None and id_validation["valid"] is False and id_type == "aadhaar":
@@ -1118,18 +1144,25 @@ def analyze_document(
     # ensemble - avoided here on purpose since these two signals
     # measure genuinely different things).
     risk_score = max(ai_generated_score, manipulation_score)
-    verdict = Verdict.from_risk_score(risk_score)
     confidence_enum = Confidence.from_risk_score(risk_score)
 
     ai_generated_likely = ai_generated_score >= 0.60
     manipulation_likely = manipulation_score >= 0.60
 
+    # The generic binary Verdict enum (AUTHENTIC/AI-GENERATED) can't
+    # represent "flagged, but for tampering rather than AI generation" -
+    # using it directly here mislabeled manipulation-only findings as
+    # "AI-GENERATED" even when the AI-generation check itself came back
+    # clean. Documents get a third, more honest label instead.
     if ai_generated_likely and ai_generated_score >= manipulation_score:
         primary_finding = "AI-GENERATED DOCUMENT SUSPECTED"
+        verdict_label = "AI-GENERATED"
     elif manipulation_likely:
         primary_finding = "MANIPULATION SUSPECTED"
+        verdict_label = "MANIPULATED"
     else:
         primary_finding = "AUTHENTIC DOCUMENT"
+        verdict_label = "AUTHENTIC"
 
     checks = {
         "ai_generation": "Detected" if ai_generated_likely else "Not detected",
@@ -1139,6 +1172,15 @@ def analyze_document(
     }
     if id_validation is not None:
         checks["id_number"] = "Valid format" if id_validation["valid"] else "Invalid"
+    if c2pa_info.get("has_c2pa"):
+        if c2pa_info.get("ai_generated_signal"):
+            checks["c2pa"] = "AI-generation declared"
+        elif c2pa_info.get("validation_state") == "Invalid":
+            checks["c2pa"] = "Tampered"
+        elif c2pa_info.get("valid"):
+            checks["c2pa"] = "Verified"
+        else:
+            checks["c2pa"] = "Present, unverified"
 
     evidence: dict[str, Any] = {}
     try:
@@ -1151,7 +1193,7 @@ def analyze_document(
     return {
         "risk_score": risk_score,
         "risk_percent": risk_score * 100,
-        "verdict": verdict.value,
+        "verdict": verdict_label,
         "confidence": confidence_enum.value,
         "risk_level": RiskLevel.from_risk_score(risk_score).value,
         "primary_finding": primary_finding,
@@ -1175,7 +1217,14 @@ def analyze_document(
             "camera_model": (metadata.get("exif") or {}).get("camera_model"),
             "software": (metadata.get("exif") or {}).get("software"),
         },
-        "has_c2pa": metadata.get("has_c2pa", False),
+        "has_c2pa": c2pa_info.get("has_c2pa", False),
+        "c2pa": {
+            "valid": c2pa_info.get("valid", False),
+            "validation_state": c2pa_info.get("validation_state"),
+            "generator": c2pa_info.get("generator"),
+            "ai_generated_signal": c2pa_info.get("ai_generated_signal", False),
+            "actions": c2pa_info.get("actions", []),
+        } if c2pa_info.get("has_c2pa") else None,
         "processing_time_ms": elapsed_ms,
         "media_type": "document",
     }

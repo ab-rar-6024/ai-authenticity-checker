@@ -15,14 +15,40 @@ import useToastStore from '../store/useToastStore';
  * @param {() => void} [onDone] - called after a successful generate+download
  * @param {() => void} [onCancel] - called when the user cancels; omit to hide the Cancel button
  */
+const ID_PROOF_MAX_BYTES = 5 * 1024 * 1024;
+const ID_PROOF_TYPES = new Set(['image/jpeg', 'image/png']);
+
 export default function ComplaintForm({ analysis, fileName, onDone, onCancel }) {
   const [form, setForm] = useState({
     name: '', phone: '', email: '', address: '', incidentDescription: '',
   });
+  const [idProof, setIdProof] = useState(null);
+  const [idProofError, setIdProofError] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
 
   const handleChange = useCallback((field) => (e) => {
     setForm((prev) => ({ ...prev, [field]: e.target.value }));
+  }, []);
+
+  const handleIdProofChange = useCallback((e) => {
+    const file = e.target.files?.[0] || null;
+    if (!file) {
+      setIdProof(null);
+      setIdProofError('');
+      return;
+    }
+    if (!ID_PROOF_TYPES.has(file.type)) {
+      setIdProof(null);
+      setIdProofError('Must be a JPG or PNG image.');
+      return;
+    }
+    if (file.size > ID_PROOF_MAX_BYTES) {
+      setIdProof(null);
+      setIdProofError('Must be under 5MB.');
+      return;
+    }
+    setIdProofError('');
+    setIdProof(file);
   }, []);
 
   const handleGenerate = async (e) => {
@@ -30,7 +56,7 @@ export default function ComplaintForm({ analysis, fileName, onDone, onCancel }) 
     if (!form.name.trim() || !analysis) return;
     setIsGenerating(true);
     try {
-      const { blob, filename } = await forensicApi.generateComplaint(analysis, fileName, form);
+      const { blob, filename } = await forensicApi.generateComplaint(analysis, fileName, form, idProof);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -96,6 +122,24 @@ export default function ComplaintForm({ analysis, fileName, onDone, onCancel }) 
           className="field-input text-sm resize-none"
           placeholder="Your address"
         />
+      </div>
+
+      <div>
+        <label className="text-xs mb-1 block text-text-2">Government ID Proof (Aadhaar / PAN / Passport)</label>
+        <input
+          type="file"
+          accept="image/jpeg,image/png"
+          onChange={handleIdProofChange}
+          className="field-input text-sm file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-bg-inset file:text-text-2"
+        />
+        {idProofError ? (
+          <p className="text-xs mt-1 text-risk-critical">{idProofError}</p>
+        ) : (
+          <p className="text-xs mt-1 text-text-3">
+            JPG or PNG, under 5MB — the portal requires this in Complainant Details when filing.
+            {idProof && <span className="text-risk-clear"> {idProof.name} attached.</span>}
+          </p>
+        )}
       </div>
 
       <div>
