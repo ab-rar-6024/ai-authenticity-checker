@@ -1,7 +1,6 @@
 """
 FastAPI REST API endpoints for ProofyX.
 
-All endpoints share the same core pipeline as the Gradio UI.
 Responses follow the envelope pattern: {success, data, error}.
 """
 

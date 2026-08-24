@@ -1,9 +1,8 @@
 """
 Core detection pipeline for ProofyX.
 
-Extracted from app.py — all functions return plain Python dicts
-with no UI framework dependencies. Both the Gradio UI and FastAPI
-REST API call these functions identically.
+All functions return plain Python dicts with no UI framework
+dependencies, called directly by the FastAPI REST API layer.
 
 probability is ALWAYS P(fake): 0.0 = certainly real, 1.0 = certainly fake.
 """
