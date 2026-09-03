@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import platform
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -65,10 +66,27 @@ def _kill_tree(proc: subprocess.Popen) -> None:
             pass
 
 
+def _wait_for_backend(host: str = "127.0.0.1", port: int = 7861, timeout: int = 120) -> bool:
+    """Poll until the backend accepts TCP connections or timeout expires."""
+    print(f"[dev] waiting for backend on {host}:{port} (ML models may take a moment)...", flush=True)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection((host, port), timeout=1):
+                print(f"[dev] backend is ready on port {port} ✓", flush=True)
+                return True
+        except OSError:
+            time.sleep(0.5)
+    print(f"[dev] WARNING: backend did not become ready within {timeout}s — starting frontend anyway")
+    return False
+
+
 def main() -> int:
     backend_cmd = [_venv_python(), "main.py"]
     print(f"[dev] backend:  {' '.join(backend_cmd)}  (cwd={ROOT})")
     backend = subprocess.Popen(backend_cmd, cwd=ROOT)
+
+    _wait_for_backend()
 
     print(f"[dev] frontend: npm run dev  (cwd={FRONTEND})")
     frontend = _popen_frontend()
