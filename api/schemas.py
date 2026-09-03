@@ -9,11 +9,30 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+def _to_float(v: Any) -> float:
+    """Coerce numpy/torch scalars to a native Python float."""
+    if hasattr(v, "item"):
+        return float(v.item())
+    return float(v)
 
 
 class ProofyxBase(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
+
+    @field_validator("risk_score", mode="before", check_fields=False)
+    @classmethod
+    def clamp_risk_score(cls, v: Any) -> float:
+        """Coerce to float and clamp to [0, 1]."""
+        return max(0.0, min(1.0, _to_float(v)))
+
+    @field_validator("risk_percent", mode="before", check_fields=False)
+    @classmethod
+    def clamp_risk_percent(cls, v: Any) -> float:
+        """Coerce to float and clamp to [0, 100]."""
+        return max(0.0, min(100.0, _to_float(v)))
 
 
 # ──────────────────────────────────────────────
@@ -127,7 +146,7 @@ class VideoAnalysisResponse(BaseModel):
 # Audio Analysis
 # ──────────────────────────────────────────────
 
-class AudioAnalysisResult(BaseModel):
+class AudioAnalysisResult(ProofyxBase):
     id: str = ""
     timestamp: str = ""
     risk_score: float = Field(ge=0, le=1)
