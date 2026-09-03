@@ -51,6 +51,7 @@ COPY core/ core/
 COPY core_models/ core_models/
 COPY pipeline/ pipeline/
 COPY db/ db/
+COPY utils/ utils/
 COPY configs/ configs/
 COPY alembic/ alembic/
 COPY alembic.ini .
