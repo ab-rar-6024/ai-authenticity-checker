@@ -9,6 +9,7 @@ import { isAuthEnabled } from './services/supabase';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import ForgotPassword from './pages/ForgotPassword';
+import Landing from './pages/Landing';
 
 // App pages — lazy-loaded to reduce initial bundle
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -68,6 +69,9 @@ function App() {
     <ErrorBoundary>
       <BrowserRouter>
         <Routes>
+          {/* Public landing page */}
+          <Route path="/landing" element={<Landing />} />
+
           {/* Guest-only auth routes — redirect to / if already logged in */}
           <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
           <Route path="/signup" element={<GuestRoute><Signup /></GuestRoute>} />
