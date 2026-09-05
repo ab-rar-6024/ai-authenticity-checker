@@ -181,6 +181,8 @@ class MultimodalAnalysisResult(ProofyxBase):
     confidence: str
     media_types: list[str] = Field(default_factory=list)
     modality_scores: dict[str, Optional[float]] = Field(default_factory=dict)
+    flagged_modalities: list[str] = Field(default_factory=list)
+    clean_modalities: list[str] = Field(default_factory=list)
     fusion_weights: dict[str, float] = Field(default_factory=dict)
     explanation: str = ""
     processing_time_ms: float = 0.0

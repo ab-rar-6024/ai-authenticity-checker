@@ -106,6 +106,24 @@ export default function Multimodal() {
               <div className="w-full">
                 <VerdictCard verdict={results.verdict} riskScore={results.risk_percent} />
               </div>
+
+              {results.clean_modalities?.length > 0 && results.flagged_modalities?.length > 0 && (
+                <div className="w-full p-3 rounded-lg bg-bg-inset border border-border-dim text-xs leading-relaxed">
+                  <p className="text-text-2">
+                    <span className="text-risk-critical font-semibold">
+                      Flagged: {results.flagged_modalities.join(', ')}
+                    </span>
+                    {' — '}
+                    <span className="text-risk-clear font-semibold">
+                      Authentic: {results.clean_modalities.join(', ')}
+                    </span>
+                  </p>
+                  <p className="mt-1 text-text-3">
+                    The verdict above reflects the combined submission — not every
+                    uploaded file is necessarily AI-generated.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Right: Modality contributions */}

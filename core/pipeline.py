@@ -964,7 +964,7 @@ def analyze_multimodal(
             modality_scores["image"] = img_result["risk_score"]
 
     if video_path is not None:
-        vid_result = analyze_video(video_path)
+        vid_result = analyze_video(video_path, fps=1.0, mode="fast")
         if "error" not in vid_result:
             results["video"] = vid_result
             modality_scores["video"] = vid_result["risk_score"]
@@ -989,6 +989,22 @@ def analyze_multimodal(
     verdict = Verdict.from_risk_score(final_score)
     confidence_enum = Confidence.from_risk_score(final_score)
 
+    # The fused risk_score/verdict is a single weighted number, which can
+    # read as "everything here is fake" even when only some modalities
+    # actually triggered - e.g. a genuine photo alongside a deepfaked
+    # video+audio pair fuses to an AI-GENERATED verdict overall, which is
+    # correct for "this submission contains AI-generated content" but
+    # misleading if skimmed as "this image is fake too". Surfacing which
+    # modalities individually crossed the threshold (same 0.60 cutoff
+    # Verdict.from_risk_score uses) lets the UI say that explicitly
+    # instead of only showing it buried in the per-modality score bars.
+    flagged_modalities = sorted(
+        k for k, v in active_scores.items() if v >= 0.60
+    )
+    clean_modalities = sorted(
+        k for k, v in active_scores.items() if v < 0.60
+    )
+
     try:
         from utils.explainability import explain_multimodal
         explanation = explain_multimodal(
@@ -1008,6 +1024,8 @@ def analyze_multimodal(
         "confidence": confidence_enum.value,
         "media_types": list(active.keys()),
         "modality_scores": modality_scores,
+        "flagged_modalities": flagged_modalities,
+        "clean_modalities": clean_modalities,
         "fusion_weights": fusion_weights,
         "explanation": explanation,
         "processing_time_ms": elapsed_ms,
