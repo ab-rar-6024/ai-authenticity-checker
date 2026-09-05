@@ -5,7 +5,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import useAuthStore from './store/useAuthStore';
 import { isAuthEnabled } from './services/supabase';
 
-// Auth pages — small, keep eager for instant paint
+// Auth & Public pages
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import ForgotPassword from './pages/ForgotPassword';
@@ -48,13 +48,13 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
-/** Redirect authenticated users away from login/signup/forgot pages. */
+/** Redirect authenticated users away from login/signup/forgot pages to dashboard. */
 function GuestRoute({ children }) {
   const { user, isLoading } = useAuthStore();
 
   if (!isAuthEnabled()) return children;
   if (isLoading) return null;
-  if (user) return <Navigate to="/" replace />;
+  if (user) return <Navigate to="/dashboard" replace />;
   return children;
 }
 
@@ -69,35 +69,36 @@ function App() {
     <ErrorBoundary>
       <BrowserRouter>
         <Routes>
-          {/* Public landing page */}
-          <Route path="/landing" element={<Landing />} />
+          {/* Public Landing Page at root */}
+          <Route path="/" element={<Landing />} />
+          <Route path="/landing" element={<Navigate to="/" replace />} />
 
-          {/* Guest-only auth routes — redirect to / if already logged in */}
+          {/* Guest-only auth routes — redirect to /dashboard if already logged in */}
           <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
           <Route path="/signup" element={<GuestRoute><Signup /></GuestRoute>} />
           <Route path="/forgot-password" element={<GuestRoute><ForgotPassword /></GuestRoute>} />
 
-          {/* Protected app routes */}
+          {/* Main App & Forensics Suite */}
           <Route
-            path="/"
             element={
               <ProtectedRoute>
                 <Layout />
               </ProtectedRoute>
             }
           >
-            <Route index element={<Suspense fallback={<PageLoader />}><Dashboard /></Suspense>} />
-            <Route path="image" element={<Suspense fallback={<PageLoader />}><ImageAnalysis /></Suspense>} />
-            <Route path="video" element={<Suspense fallback={<PageLoader />}><VideoAnalysis /></Suspense>} />
-            <Route path="audio" element={<Suspense fallback={<PageLoader />}><AudioAnalysis /></Suspense>} />
-            <Route path="document" element={<Suspense fallback={<PageLoader />}><DocumentAnalysis /></Suspense>} />
-            <Route path="complaint" element={<Suspense fallback={<PageLoader />}><CyberComplaint /></Suspense>} />
-            <Route path="multimodal" element={<Suspense fallback={<PageLoader />}><Multimodal /></Suspense>} />
-            <Route path="history" element={<Suspense fallback={<PageLoader />}><History /></Suspense>} />
-            <Route path="system" element={<Suspense fallback={<PageLoader />}><SystemStatus /></Suspense>} />
+            <Route path="/dashboard" element={<Suspense fallback={<PageLoader />}><Dashboard /></Suspense>} />
+            <Route path="/app" element={<Suspense fallback={<PageLoader />}><Dashboard /></Suspense>} />
+            <Route path="/image" element={<Suspense fallback={<PageLoader />}><ImageAnalysis /></Suspense>} />
+            <Route path="/video" element={<Suspense fallback={<PageLoader />}><VideoAnalysis /></Suspense>} />
+            <Route path="/audio" element={<Suspense fallback={<PageLoader />}><AudioAnalysis /></Suspense>} />
+            <Route path="/document" element={<Suspense fallback={<PageLoader />}><DocumentAnalysis /></Suspense>} />
+            <Route path="/complaint" element={<Suspense fallback={<PageLoader />}><CyberComplaint /></Suspense>} />
+            <Route path="/multimodal" element={<Suspense fallback={<PageLoader />}><Multimodal /></Suspense>} />
+            <Route path="/history" element={<Suspense fallback={<PageLoader />}><History /></Suspense>} />
+            <Route path="/system" element={<Suspense fallback={<PageLoader />}><SystemStatus /></Suspense>} />
           </Route>
 
-          {/* Catch-all: redirect unknown paths to dashboard */}
+          {/* Catch-all: redirect unknown paths to root */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

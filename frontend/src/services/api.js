@@ -8,6 +8,7 @@ if (rawUrl.endsWith('/api')) {
 
 const api = axios.create({
   baseURL: rawUrl || '',
+  timeout: 600000, // 10 minutes for heavy multi-modal inference
 });
 
 // Attach Supabase JWT token to all requests when auth is enabled

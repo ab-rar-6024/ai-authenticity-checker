@@ -67,7 +67,7 @@ ALLOWED_AUDIO_EXT = {".wav", ".mp3", ".flac", ".ogg", ".m4a"}
 TIMEOUT_IMAGE = int(os.environ.get("PROOFYX_TIMEOUT_IMAGE", "60"))
 TIMEOUT_VIDEO = int(os.environ.get("PROOFYX_TIMEOUT_VIDEO", "600"))
 TIMEOUT_AUDIO = int(os.environ.get("PROOFYX_TIMEOUT_AUDIO", "90"))
-TIMEOUT_MULTIMODAL = int(os.environ.get("PROOFYX_TIMEOUT_MULTIMODAL", "300"))
+TIMEOUT_MULTIMODAL = int(os.environ.get("PROOFYX_TIMEOUT_MULTIMODAL", "600"))
 
 # Magic bytes for image format validation
 MAGIC_BYTES: dict[str, list[bytes]] = {

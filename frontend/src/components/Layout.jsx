@@ -17,6 +17,7 @@ import {
   X,
   LogOut,
   User,
+  Home,
 } from 'lucide-react';
 import ErrorBoundary from './ErrorBoundary';
 import Toaster from './Toaster';
@@ -26,12 +27,12 @@ import { isAuthEnabled } from '../services/supabase';
 import logo from '../assets/logo.jpeg';
 
 const NAV_LINKS = [
-  { to: '/',           label: 'Dashboard',   icon: LayoutDashboard, exact: true },
-  { to: '/image',      label: 'Image AI',    icon: ImageIcon },
-  { to: '/audio',      label: 'Audio Voice', icon: Mic },
+  { to: '/dashboard',  label: 'Dashboard',      icon: LayoutDashboard, exact: true },
+  { to: '/image',      label: 'Image AI',       icon: ImageIcon },
+  { to: '/audio',      label: 'Audio Voice',    icon: Mic },
   { to: '/video',      label: 'Video Deepfake', icon: Film },
-  { to: '/multimodal', label: 'Multimodal',  icon: Layers },
-  { to: '/history',    label: 'History',     icon: Clock },
+  { to: '/multimodal', label: 'Multimodal',     icon: Layers },
+  { to: '/history',    label: 'History',        icon: Clock },
 ];
 
 export default function Layout() {
@@ -48,11 +49,11 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen flex flex-col relative overflow-x-hidden">
-      {/* Top Floating Pill Navigation Header (Matching Reference Image) */}
+      {/* Top Floating Pill Navigation Header */}
       <header className="sticky top-4 z-50 px-4 sm:px-8 max-w-7xl mx-auto w-full">
         <nav className="pill-nav px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
-          {/* Brand Logo */}
-          <Link to="/" className="flex items-center gap-2.5 flex-shrink-0 group">
+          {/* Brand Logo - Links to Dashboard */}
+          <Link to="/dashboard" className="flex items-center gap-2.5 flex-shrink-0 group" title="Forensics Dashboard">
             <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-purple-300 shadow-md group-hover:scale-105 transition-transform flex items-center justify-center bg-purple-100">
               <img src={logo} alt="ProofyX" className="w-full h-full object-cover" />
             </div>
@@ -91,11 +92,14 @@ export default function Layout() {
               Cyber Cell
             </Link>
 
+            {/* Quick button to view Landing Page */}
             <Link
-              to="/landing"
-              className="btn-primary py-1.5 px-4 text-xs font-bold shadow-sm"
+              to="/"
+              className="btn-primary py-1.5 px-4 text-xs font-bold shadow-sm flex items-center gap-1.5"
+              title="Return to Landing Page"
             >
-              Explore 3D Demo
+              <Home size={13} />
+              Landing Page
             </Link>
           </div>
 
@@ -148,11 +152,12 @@ export default function Layout() {
                   Cyber Report
                 </Link>
                 <Link
-                  to="/landing"
+                  to="/"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="flex-1 text-center py-2 rounded-xl text-xs font-bold text-white bg-purple-700"
+                  className="flex-1 text-center py-2 rounded-xl text-xs font-bold text-white bg-purple-700 flex items-center justify-center gap-1"
                 >
-                  3D View
+                  <Home size={13} />
+                  Landing
                 </Link>
               </div>
             </motion.div>
