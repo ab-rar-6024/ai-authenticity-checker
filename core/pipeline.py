@@ -964,7 +964,16 @@ def analyze_multimodal(
             modality_scores["image"] = img_result["risk_score"]
 
     if video_path is not None:
-        vid_result = analyze_video(video_path, fps=1.0, mode="fast")
+        # fps=1.0 (the video-analysis default) samples too sparsely for
+        # short clips - e.g. an 8s video yields only ~8 sampled frames,
+        # so a deepfake with intermittent/subtle artifacts can land on a
+        # sample that mostly misses them, producing an inconsistent
+        # authentic-leaning score run to run. fps=2.0 was already found
+        # (see video-analysis testing) to catch AI artifacts fast mode
+        # missed at lower sampling density, at the cost of roughly double
+        # the per-video processing time - acceptable here since the
+        # overall multimodal request already budgets up to 600s.
+        vid_result = analyze_video(video_path, fps=2.0, mode="fast")
         if "error" not in vid_result:
             results["video"] = vid_result
             modality_scores["video"] = vid_result["risk_score"]
