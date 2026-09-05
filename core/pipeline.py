@@ -964,16 +964,16 @@ def analyze_multimodal(
             modality_scores["image"] = img_result["risk_score"]
 
     if video_path is not None:
-        # fps=1.0 (the video-analysis default) samples too sparsely for
-        # short clips - e.g. an 8s video yields only ~8 sampled frames,
-        # so a deepfake with intermittent/subtle artifacts can land on a
-        # sample that mostly misses them, producing an inconsistent
-        # authentic-leaning score run to run. fps=2.0 was already found
-        # (see video-analysis testing) to catch AI artifacts fast mode
-        # missed at lower sampling density, at the cost of roughly double
-        # the per-video processing time - acceptable here since the
-        # overall multimodal request already budgets up to 600s.
-        vid_result = analyze_video(video_path, fps=2.0, mode="fast")
+        # "fast" mode (single lightweight CorefakeNet pass) was found to
+        # miss a real deepfake that "ensemble" mode (7-model vote) caught
+        # correctly (28% vs 65% risk on the same clip, confirmed via
+        # direct testing) - a genuine accuracy gap, not just a sampling
+        # density issue (raising fast mode's fps from 1.0 to 2.0 fixed a
+        # separate run-to-run *consistency* bug but didn't fix this).
+        # image already uses "ensemble" here for the same reason; video
+        # was the odd one out. Ensemble is slower, but the overall
+        # multimodal request already budgets up to 600s.
+        vid_result = analyze_video(video_path, fps=1.0, mode="ensemble")
         if "error" not in vid_result:
             results["video"] = vid_result
             modality_scores["video"] = vid_result["risk_score"]
