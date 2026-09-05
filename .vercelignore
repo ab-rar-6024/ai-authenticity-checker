@@ -10,7 +10,7 @@
 # setup. The approach that actually worked: copy frontend/'s source
 # (+ .vercel/project.json) into a clean directory with none of this
 # repo's history/weights nearby, and deploy from there instead.
-models/
+/models/
 .git/
 .venv/
 node_modules/
@@ -18,17 +18,17 @@ frontend/node_modules/
 *.pth
 *.joblib
 *.caffemodel
-api/
-core/
-core_models/
-db/
-alembic/
-training/
-general_ai/
-inference/
-pipeline/
-evaluation/
-utils/
-docs/
-configs/
-tests/
+/api/
+/core/
+/core_models/
+/db/
+/alembic/
+/training/
+/general_ai/
+/inference/
+/pipeline/
+/evaluation/
+/utils/
+/docs/
+/configs/
+/tests/
