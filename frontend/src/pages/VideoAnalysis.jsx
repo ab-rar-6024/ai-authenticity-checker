@@ -21,6 +21,7 @@ import {
 import { fadeUp } from '../utils/animations';
 import PageHeader from '../components/PageHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
+import ComplaintModal from '../components/ComplaintModal';
 import RiskGauge from '../components/RiskGauge';
 import FrameTable from '../components/FrameTable';
 import VideoRiskTimeline from '../components/VideoRiskTimeline';
@@ -61,6 +62,7 @@ export default function VideoAnalysis() {
   const [fileMeta, setFileMeta] = useState(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [scanStepIndex, setScanStepIndex] = useState(0);
+  const [complaintOpen, setComplaintOpen] = useState(false);
 
   const fileInputRef = useRef(null);
   const videoRef = useRef(null);
@@ -496,6 +498,16 @@ export default function VideoAnalysis() {
                     {results.explanation || 'Aggregated multi-frame risk score computed across all extracted video frames.'}
                   </p>
                 </div>
+
+                {results.verdict === 'AI-GENERATED' && (
+                  <button
+                    onClick={() => setComplaintOpen(true)}
+                    className="btn-danger w-full py-2.5 text-xs sm:text-sm font-bold mt-4"
+                  >
+                    <ShieldAlert size={15} />
+                    Raise Cyber Crime Complaint
+                  </button>
+                )}
               </div>
 
               {/* Gauge & Frame Metrics */}
@@ -590,6 +602,13 @@ export default function VideoAnalysis() {
         confirmLabel="Cancel Analysis"
         onConfirm={handleCancelConfirm}
         onCancel={() => setConfirmCancel(false)}
+      />
+
+      <ComplaintModal
+        open={complaintOpen}
+        onClose={() => setComplaintOpen(false)}
+        analysis={results}
+        fileName={file?.name}
       />
     </motion.div>
   );

@@ -22,6 +22,7 @@ import {
 import { fadeUp } from '../utils/animations';
 import PageHeader from '../components/PageHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
+import ComplaintModal from '../components/ComplaintModal';
 import RiskGauge from '../components/RiskGauge';
 import useForensicStore from '../store/useForensicStore';
 import { isFileAccepted } from '../utils/format';
@@ -37,6 +38,7 @@ const AUDIO_SCAN_STEPS = [
 export default function AudioAnalysis() {
   const [file, setFile] = useState(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [complaintOpen, setComplaintOpen] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -576,6 +578,16 @@ export default function AudioAnalysis() {
                     {results.explanation || 'Spectral analysis completed across frequency and phoneme distribution domains.'}
                   </p>
                 </div>
+
+                {results.verdict === 'AI-GENERATED' && (
+                  <button
+                    onClick={() => setComplaintOpen(true)}
+                    className="btn-danger w-full py-2.5 text-xs sm:text-sm font-bold mt-4"
+                  >
+                    <ShieldAlert size={15} />
+                    Raise Cyber Crime Complaint
+                  </button>
+                )}
               </div>
 
               {/* Dual Speedometer Dials */}
@@ -673,6 +685,13 @@ export default function AudioAnalysis() {
         confirmLabel="Cancel Analysis"
         onConfirm={handleCancelConfirm}
         onCancel={() => setConfirmCancel(false)}
+      />
+
+      <ComplaintModal
+        open={complaintOpen}
+        onClose={() => setComplaintOpen(false)}
+        analysis={results}
+        fileName={file?.name}
       />
     </motion.div>
   );

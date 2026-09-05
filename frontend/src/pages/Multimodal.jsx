@@ -1,9 +1,10 @@
 import React, { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Layers, Zap, ShieldCheck, X } from 'lucide-react';
+import { Layers, Zap, ShieldCheck, ShieldAlert, X } from 'lucide-react';
 import { fadeUp, fadeIn } from '../utils/animations';
 import PageHeader from '../components/PageHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
+import ComplaintModal from '../components/ComplaintModal';
 import UploadZone from '../components/UploadZone';
 import RiskGauge from '../components/RiskGauge';
 import ScoreBar from '../components/ScoreBar';
@@ -17,6 +18,7 @@ export default function Multimodal() {
   const [video, setVideo] = useState(null);
   const [audio, setAudio] = useState(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [complaintOpen, setComplaintOpen] = useState(false);
 
   const { multimodalAnalysis, runMultimodalAnalysis, clearAnalysis } = useForensicStore();
   const { isAnalyzing, results, error } = multimodalAnalysis;
@@ -124,6 +126,16 @@ export default function Multimodal() {
                   </p>
                 </div>
               )}
+
+              {results.verdict === 'AI-GENERATED' && (
+                <button
+                  onClick={() => setComplaintOpen(true)}
+                  className="btn-danger w-full py-2.5 text-sm"
+                >
+                  <ShieldAlert size={15} />
+                  Raise Cyber Crime Complaint
+                </button>
+              )}
             </div>
 
             {/* Right: Modality contributions */}
@@ -174,6 +186,13 @@ export default function Multimodal() {
         confirmLabel="Cancel Analysis"
         onConfirm={handleCancelConfirm}
         onCancel={() => setConfirmCancel(false)}
+      />
+
+      <ComplaintModal
+        open={complaintOpen}
+        onClose={() => setComplaintOpen(false)}
+        analysis={results}
+        fileName={image?.name || video?.name || audio?.name}
       />
     </motion.div>
   );
