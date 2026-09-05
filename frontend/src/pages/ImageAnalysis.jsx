@@ -28,7 +28,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import ComplaintModal from '../components/ComplaintModal';
 import RiskGauge from '../components/RiskGauge';
 import ScoreBar from '../components/ScoreBar';
-import HeatmapViewer from '../components/HeatmapViewer';
+import SnakeLoader from '../components/SnakeLoader';
 import { isFileAccepted } from '../utils/format';
 import { getRiskColorRaw, getRiskLevel } from '../utils/risk';
 
@@ -155,6 +155,8 @@ export default function ImageAnalysis() {
   const modelScoreEntries = results?.model_scores
     ? Object.entries(results.model_scores)
     : [];
+
+  const isFastMode = results?.fusion_mode === 'corefakenet_attention';
 
   const gradcamUrl = results?.gradcam_overlay
     ? (results.gradcam_overlay.startsWith('data:')
@@ -463,19 +465,21 @@ export default function ImageAnalysis() {
             /* Futuristic Reference-Styled Empty Waiting State */
             <div className="card p-8 min-h-[480px] flex flex-col items-center justify-center text-center relative overflow-hidden">
               <div className="max-w-md space-y-5 relative z-10">
-                {/* 3D-styled Robot Orb */}
-                <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-purple-600 via-indigo-600 to-pink-500 p-1 mx-auto shadow-xl shadow-purple-500/20">
-                  <div className="w-full h-full rounded-full bg-[#1E1238] flex items-center justify-center text-white relative">
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-2.5 h-2.5 rounded-full bg-pink-400 shadow-[0_0_8px_#F472B6]" />
-                      <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#38BDF8]" />
-                    </div>
-                  </div>
+                <div className="flex items-center justify-center">
+                  <SnakeLoader
+                    width={9}
+                    speed={90}
+                    playing={isAnalyzing}
+                    snakeColor="#6D28D9"
+                    appleColor="#EC4899"
+                    className="gap-[3px]"
+                    dotClassName="size-2 rounded-[2px]"
+                  />
                 </div>
 
                 <div>
                   <h3 className="text-lg font-black text-[#1E1238]">
-                    Forensic Intelligence Station Ready
+                    {isAnalyzing ? 'Running Deep Neural Verification…' : 'Forensic Intelligence Station Ready'}
                   </h3>
                   <p className="text-xs sm:text-sm text-[#5B4E75] mt-1.5 leading-relaxed">
                     Upload an image on the left to activate 7-model deep neural verification, spatial Grad-CAM attention maps, and web cross-referencing.
@@ -563,14 +567,16 @@ export default function ImageAnalysis() {
                 <div className="card p-4 flex flex-col justify-between">
                   <div className="flex items-center gap-2 text-[#8F81A8] mb-2">
                     <Cpu size={14} className="text-purple-700" />
-                    <span className="label-tag text-[10px]">Model Consensus</span>
+                    <span className="label-tag text-[10px]">{isFastMode ? 'Model Verdict' : 'Model Consensus'}</span>
                   </div>
                   <div>
                     <div className="text-2xl font-black font-display text-[#1E1238]">
                       {results.model_agreement || 'High'}
                     </div>
                     <p className="text-xs text-[#5B4E75] mt-1">
-                      Agreement level across 7 neural models.
+                      {isFastMode
+                        ? 'Single-model attention-weighted score, not a multi-model vote.'
+                        : 'Agreement level across the neural ensemble.'}
                     </p>
                   </div>
                   <div className="mt-3 pt-2 border-t border-purple-100 flex justify-between text-xs font-semibold">
@@ -602,18 +608,26 @@ export default function ImageAnalysis() {
                 </div>
               </div>
 
-              {/* 7-Model Breakdown */}
+              {/* Model / Head Breakdown */}
               {modelScoreEntries.length > 0 && (
                 <div className="card p-5 space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Layers size={14} className="text-purple-700" />
-                      <span className="label-tag">Ensemble Classifier Breakdown</span>
+                      <span className="label-tag">
+                        {isFastMode ? 'CorefakeNet Attention Heads' : 'Ensemble Classifier Breakdown'}
+                      </span>
                     </div>
                     <span className="text-xs font-mono font-bold text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-full">
-                      {modelScoreEntries.length} Models
+                      {modelScoreEntries.length} {isFastMode ? 'Heads' : 'Models'}
                     </span>
                   </div>
+
+                  {isFastMode && (
+                    <p className="text-xs text-[#8F81A8] -mt-2">
+                      One CorefakeNet pass, 5 attention-fused heads below — not separate models.
+                    </p>
+                  )}
 
                   <div className="space-y-3 pt-1">
                     {modelScoreEntries.map(([name, score]) => (
@@ -665,22 +679,6 @@ export default function ImageAnalysis() {
                 </div>
               )}
 
-              {/* Grad-CAM Viewer */}
-              {gradcamUrl && (
-                <div className="card p-5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Sparkles size={14} className="text-purple-700" />
-                      <span className="label-tag">Grad-CAM Neural Attention</span>
-                    </div>
-                    <span className="text-xs text-[#8F81A8]">Heatmap Overlay</span>
-                  </div>
-                  <HeatmapViewer
-                    originalFile={file}
-                    gradcamBase64={results.gradcam_overlay}
-                  />
-                </div>
-              )}
             </motion.div>
           )}
         </div>

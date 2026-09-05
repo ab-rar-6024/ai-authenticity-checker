@@ -24,6 +24,7 @@ import PageHeader from '../components/PageHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ComplaintModal from '../components/ComplaintModal';
 import RiskGauge from '../components/RiskGauge';
+import SnakeLoader from '../components/SnakeLoader';
 import useForensicStore from '../store/useForensicStore';
 import { isFileAccepted } from '../utils/format';
 import { getRiskColorRaw, getRiskLevel } from '../utils/risk';
@@ -495,26 +496,21 @@ export default function AudioAnalysis() {
             /* Reference Styled Cube + Equalizer Empty State */
             <div className="card p-8 min-h-[480px] flex flex-col items-center justify-center text-center relative overflow-hidden">
               <div className="max-w-md space-y-5 relative z-10">
-                {/* 3D-styled Futuristic Cube with Cyan Equalizer Bars (Exact Match from reference!) */}
-                <div className="w-24 h-24 rounded-3xl bg-gradient-to-tr from-white via-purple-50 to-white border-2 border-purple-200 p-3 mx-auto shadow-xl shadow-purple-500/15 flex flex-col items-center justify-between relative">
-                  {/* Cyan Glowing Equalizer on Top */}
-                  <div className="flex items-end justify-center gap-1 h-6">
-                    <div className="cyan-eq-bar" style={{ animationDelay: '0s' }} />
-                    <div className="cyan-eq-bar" style={{ animationDelay: '0.2s' }} />
-                    <div className="cyan-eq-bar" style={{ animationDelay: '0.4s' }} />
-                    <div className="cyan-eq-bar" style={{ animationDelay: '0.1s' }} />
-                    <div className="cyan-eq-bar" style={{ animationDelay: '0.3s' }} />
-                  </div>
-
-                  {/* Glowing Core Orb Inside Cube */}
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-700 to-pink-500 shadow-md shadow-purple-500/50 flex items-center justify-center">
-                    <Mic size={14} className="text-white" />
-                  </div>
+                <div className="flex items-center justify-center">
+                  <SnakeLoader
+                    width={9}
+                    speed={90}
+                    playing={isAnalyzing}
+                    snakeColor="#6D28D9"
+                    appleColor="#EC4899"
+                    className="gap-[3px]"
+                    dotClassName="size-2 rounded-[2px]"
+                  />
                 </div>
 
                 <div>
                   <h3 className="text-lg font-black text-[#1E1238]">
-                    Acoustic Biometric Station Ready
+                    {isAnalyzing ? 'Decoding Acoustic Signal…' : 'Acoustic Biometric Station Ready'}
                   </h3>
                   <p className="text-xs sm:text-sm text-[#5B4E75] mt-1.5 leading-relaxed">
                     Upload an audio recording to identify AI voice cloning (ElevenLabs, Bark, Tortoise), speech synthesis, and vocoder artifacts.

@@ -333,14 +333,6 @@ export default function Landing() {
           {/* Direct CTA Buttons */}
           <div className="hidden sm:flex items-center gap-3">
             <Link
-              to="/complaint"
-              className="px-3.5 py-1.5 rounded-full text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 transition-colors flex items-center gap-1.5"
-            >
-              <ShieldAlert size={13} />
-              <span>Cyber Cell</span>
-            </Link>
-
-            <Link
               to="/dashboard"
               className="lp-btn-primary text-xs sm:text-sm font-bold !py-2 !px-4.5 shadow-purple-600/25 hover:shadow-purple-600/45"
             >
@@ -488,9 +480,13 @@ export default function Landing() {
               <div className="relative rounded-3xl p-3 sm:p-4 bg-gradient-to-b from-purple-200/60 to-purple-300/40 border border-purple-300/80 shadow-2xl backdrop-blur-xl group overflow-hidden">
                 {/* Reference Image with Overlay Card */}
                 <div className="relative rounded-2xl overflow-hidden shadow-lg border border-purple-400/40">
-                  <img
-                    src={heroScanImg}
-                    alt="ProofyX AI Deepfake Facial Authenticity Scan Demo"
+                  <video
+                    src="/hero-demo.mp4"
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    aria-label="ProofyX AI Deepfake Facial Authenticity Scan Demo"
                     className="w-full h-auto object-cover transform group-hover:scale-102 transition-transform duration-500"
                   />
 

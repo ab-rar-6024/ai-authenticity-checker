@@ -185,36 +185,38 @@ export default function Dashboard() {
             </div>
             <Link to="/history" className="text-xs font-bold text-purple-700 hover:underline">View All Records</Link>
           </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-[#8F81A8] text-xs bg-purple-50/50 border-b border-purple-100">
-                <th className="px-5 py-3 font-bold uppercase tracking-wider text-[10px]">Time</th>
-                <th className="px-5 py-3 font-bold uppercase tracking-wider text-[10px]">Type</th>
-                <th className="px-5 py-3 font-bold uppercase tracking-wider text-[10px]">File</th>
-                <th className="px-5 py-3 font-bold uppercase tracking-wider text-[10px]">Status</th>
-                <th className="px-5 py-3 font-bold uppercase tracking-wider text-[10px] text-right">Risk</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-purple-100/60">
-              {recentScans.map((item) => {
-                const Icon = MEDIA_ICONS[item.media_type] || FileSearch;
-                return (
-                  <tr key={item.id} className="hover:bg-purple-50/60 transition-colors cursor-pointer"
-                    onClick={() => navigate('/history')}>
-                    <td className="px-5 py-3 text-xs font-mono text-[#8F81A8] font-semibold">{formatRelativeTime(item.created_at || item.timestamp)}</td>
-                    <td className="px-5 py-3"><Icon size={15} className="text-purple-700" /></td>
-                    <td className="px-5 py-3 truncate max-w-[200px] text-[#1E1238] font-semibold">{item.file_name || `${item.media_type} analysis`}</td>
-                    <td className="px-5 py-3">
-                      <VerdictChip verdict={item.verdict} riskScore={normalizeScore(item.risk_score)} />
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <RiskBadge score={item.risk_score} />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="table-scroll scroll-fade-x">
+            <table className="w-full text-sm min-w-[560px]">
+              <thead>
+                <tr className="text-left text-[#8F81A8] text-xs bg-purple-50/50 border-b border-purple-100">
+                  <th className="px-5 py-3 font-bold uppercase tracking-wider text-[10px]">Time</th>
+                  <th className="px-5 py-3 font-bold uppercase tracking-wider text-[10px]">Type</th>
+                  <th className="px-5 py-3 font-bold uppercase tracking-wider text-[10px]">File</th>
+                  <th className="px-5 py-3 font-bold uppercase tracking-wider text-[10px]">Status</th>
+                  <th className="px-5 py-3 font-bold uppercase tracking-wider text-[10px] text-right">Risk</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-purple-100/60">
+                {recentScans.map((item) => {
+                  const Icon = MEDIA_ICONS[item.media_type] || FileSearch;
+                  return (
+                    <tr key={item.id} className="hover:bg-purple-50/60 transition-colors cursor-pointer"
+                      onClick={() => navigate('/history')}>
+                      <td className="px-5 py-3 text-xs font-mono text-[#8F81A8] font-semibold">{formatRelativeTime(item.created_at || item.timestamp)}</td>
+                      <td className="px-5 py-3"><Icon size={15} className="text-purple-700" /></td>
+                      <td className="px-5 py-3 truncate max-w-[200px] text-[#1E1238] font-semibold">{item.file_name || `${item.media_type} analysis`}</td>
+                      <td className="px-5 py-3">
+                        <VerdictChip verdict={item.verdict} riskScore={normalizeScore(item.risk_score)} />
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        <RiskBadge score={item.risk_score} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </motion.div>
       )}
     </motion.div>

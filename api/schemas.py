@@ -132,6 +132,7 @@ class VideoAnalysisResult(ProofyxBase):
     real_frames: int = 0
     temporal_analysis: Optional[TemporalAnalysisResponse] = None
     video_info: dict[str, Any] = Field(default_factory=dict)
+    fusion_mode: str = ""
     processing_time_ms: float = 0.0
     media_type: str = "video"
 

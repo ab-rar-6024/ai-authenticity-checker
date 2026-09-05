@@ -1,15 +1,31 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { FileSearch, IdCard, Search, ShieldAlert, ShieldCheck, X, Check, AlertTriangle } from 'lucide-react';
-import { fadeUp } from '../utils/animations';
+import {
+  FileSearch,
+  IdCard,
+  Search,
+  ShieldAlert,
+  ShieldCheck,
+  X,
+  Check,
+  AlertTriangle,
+  Sparkles,
+  ScanLine,
+  Fingerprint,
+  Clock,
+  ExternalLink,
+  FolderOpen,
+  RefreshCw,
+} from 'lucide-react';
+import { fadeUp, staggerFadeUp } from '../utils/animations';
 import useForensicStore from '../store/useForensicStore';
 import PageHeader from '../components/PageHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ComplaintModal from '../components/ComplaintModal';
-import UploadZone from '../components/UploadZone';
 import RiskGauge from '../components/RiskGauge';
-import VerdictCard from '../components/VerdictCard';
-import IndeterminateProgress from '../components/IndeterminateProgress';
+import SnakeLoader from '../components/SnakeLoader';
+import { isFileAccepted } from '../utils/format';
+import { getRiskColorRaw, getRiskLevel } from '../utils/risk';
 
 const CHECK_LABELS = {
   ai_generation: 'AI Generation',
@@ -17,9 +33,10 @@ const CHECK_LABELS = {
   copy_move: 'Copy-Move',
   metadata: 'Metadata',
   id_number: 'ID Number',
+  c2pa: 'C2PA Provenance',
 };
 
-const CHECK_OK_VALUES = new Set(['Not detected', 'Analyzed', 'Valid format']);
+const CHECK_OK_VALUES = new Set(['Not detected', 'Analyzed', 'Valid format', 'Verified']);
 
 const ID_TYPES = [
   { value: '', label: 'None / Other document' },
@@ -34,36 +51,104 @@ const ID_PLACEHOLDERS = {
   voter_id: 'e.g. ABC1234567',
 };
 
-function CheckBadge({ name, value }) {
+const SCAN_STEPS = [
+  'Running Error-Level Analysis across compression blocks...',
+  'Checking noise-grid consistency & copy-move regions...',
+  'Reading EXIF metadata & C2PA provenance chain...',
+  'Cross-checking ID number format & checksum...',
+];
+
+const VERDICT_STYLE = {
+  'AI-GENERATED': {
+    border: 'border-rose-300',
+    bg: 'bg-gradient-to-br from-rose-50 via-white to-rose-50/40',
+    shadow: 'shadow-lg shadow-rose-500/10',
+    Icon: ShieldAlert,
+    iconColor: 'text-rose-600',
+  },
+  MANIPULATED: {
+    border: 'border-amber-300',
+    bg: 'bg-gradient-to-br from-amber-50 via-white to-amber-50/40',
+    shadow: 'shadow-lg shadow-amber-500/10',
+    Icon: AlertTriangle,
+    iconColor: 'text-amber-600',
+  },
+  AUTHENTIC: {
+    border: 'border-emerald-300',
+    bg: 'bg-gradient-to-br from-emerald-50 via-white to-emerald-50/40',
+    shadow: 'shadow-lg shadow-emerald-500/10',
+    Icon: ShieldCheck,
+    iconColor: 'text-emerald-600',
+  },
+};
+
+function CheckBadge({ name, value, index }) {
   const ok = CHECK_OK_VALUES.has(value);
   return (
-    <div
-      className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-sm ${
+    <motion.div
+      custom={index}
+      variants={staggerFadeUp}
+      initial="hidden"
+      animate="visible"
+      className={`flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-2xl border text-sm transition-all hover:-translate-y-0.5 ${
         ok
-          ? 'bg-risk-clearDim border-[rgba(34,197,94,0.15)] text-risk-clear'
-          : 'bg-risk-cautionDim border-[rgba(250,204,21,0.15)] text-risk-caution'
+          ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+          : 'bg-amber-50 border-amber-200 text-amber-800'
       }`}
     >
-      <span className="flex items-center gap-2 text-text-1">
-        {ok ? <Check size={13} className="text-risk-clear" /> : <AlertTriangle size={13} className="text-risk-caution" />}
+      <span className="flex items-center gap-2 font-semibold text-[#1E1238]">
+        {ok ? <Check size={13} className="text-emerald-600" /> : <AlertTriangle size={13} className="text-amber-600" />}
         {CHECK_LABELS[name] || name}
       </span>
-      <span className="text-xs font-medium">{value}</span>
-    </div>
+      <span className="text-xs font-bold font-mono">{value}</span>
+    </motion.div>
   );
 }
 
 export default function DocumentAnalysis() {
   const [file, setFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [fileMeta, setFileMeta] = useState(null);
   const [idType, setIdType] = useState('');
   const [idNumber, setIdNumber] = useState('');
   const [reverseSearch, setReverseSearch] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [complaintOpen, setComplaintOpen] = useState(false);
+  const [scanStepIndex, setScanStepIndex] = useState(0);
 
   const { systemStatus, documentAnalysis, runDocumentAnalysis, clearAnalysis } = useForensicStore();
   const { isAnalyzing, results, error } = documentAnalysis;
   const reverseSearchAvailable = systemStatus?.reverse_search_available;
+
+  const handleLoadFile = useCallback((selectedFile) => {
+    if (!selectedFile) {
+      setFile(null);
+      setPreviewUrl(null);
+      setFileMeta(null);
+      return;
+    }
+    if (!isFileAccepted(selectedFile, 'image/*')) return;
+
+    const url = URL.createObjectURL(selectedFile);
+    setFile(selectedFile);
+    setPreviewUrl(url);
+    setFileMeta({
+      name: selectedFile.name,
+      size: (selectedFile.size / (1024 * 1024)).toFixed(2) + ' MB',
+      type: selectedFile.type || 'image/jpeg',
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isAnalyzing) {
+      setScanStepIndex(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setScanStepIndex((prev) => (prev + 1) % SCAN_STEPS.length);
+    }, 1800);
+    return () => clearInterval(interval);
+  }, [isAnalyzing]);
 
   const handleAnalyze = () => {
     if (file) runDocumentAnalysis(file, idType, idNumber, reverseSearchAvailable && reverseSearch);
@@ -78,42 +163,131 @@ export default function DocumentAnalysis() {
   }, [clearAnalysis]);
 
   const checkEntries = results?.checks ? Object.entries(results.checks) : [];
+  const verdictStyle = VERDICT_STYLE[results?.verdict] || VERDICT_STYLE.AUTHENTIC;
+  const VerdictIcon = verdictStyle.Icon;
 
   return (
-    <motion.div initial="hidden" animate="visible" variants={fadeUp} className="space-y-6">
+    <motion.div initial="hidden" animate="visible" variants={fadeUp} className="space-y-6 pb-12">
       <PageHeader
         icon={FileSearch}
-        title="Document Analysis"
+        title="Document Forensics"
         subtitle="Screen IDs, receipts, certificates, and scanned documents for AI generation or tampering."
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Left column: Upload + Analyze */}
-        <div className="lg:col-span-1 space-y-4">
-          <UploadZone
-            onFileSelect={setFile}
-            accept="image/*"
-            label="Drop document/ID or click to browse"
-          />
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left Column: Viewport & Config (5 cols) */}
+        <div className="lg:col-span-5 space-y-5">
+          <div className="card space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-purple-600 animate-pulse" />
+                <span className="label-tag">Document Viewport</span>
+              </div>
+              {fileMeta && (
+                <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-900 font-semibold border border-purple-200">
+                  {fileMeta.size} • {fileMeta.type.replace('image/', '').toUpperCase()}
+                </span>
+              )}
+            </div>
 
-          <div className="p-3 rounded-lg bg-bg-inset border border-border-dim text-xs text-text-2 leading-relaxed">
-            Heuristic forensic checks (error-level analysis, noise
-            consistency, copy-move detection, metadata) plus a generic
-            AI-image detector applied to the whole document. Not a
-            trained document classifier yet — treat results as a first
-            pass, same as a &quot;Beta&quot; feature.
+            <div
+              onClick={() => { if (!previewUrl) document.getElementById('doc-file-input')?.click(); }}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const dropped = e.dataTransfer.files[0];
+                if (dropped) handleLoadFile(dropped);
+              }}
+              className={`relative w-full rounded-2xl flex flex-col items-center justify-center min-h-[280px] max-h-[400px] overflow-hidden border-2 border-dashed transition-all duration-300 ${
+                previewUrl
+                  ? 'border-purple-300 bg-white/60 shadow-inner'
+                  : 'border-purple-300/80 hover:border-purple-500 bg-purple-50/50 cursor-pointer hover:bg-purple-100/40'
+              }`}
+            >
+              <input
+                id="doc-file-input"
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  if (e.target.files?.[0]) handleLoadFile(e.target.files[0]);
+                  e.target.value = '';
+                }}
+                className="hidden"
+              />
+
+              {previewUrl ? (
+                <div className="relative w-full h-[300px] flex items-center justify-center p-2">
+                  {isAnalyzing && <div className="scan-beam" />}
+                  <img src={previewUrl} alt="Document preview" className="w-full h-full object-contain rounded-xl shadow-sm" />
+                  <div className="absolute bottom-3 inset-x-3 bg-white/90 backdrop-blur-md p-2.5 rounded-xl flex items-center justify-between text-xs border border-purple-100 shadow-sm">
+                    <span className="font-semibold text-purple-950 truncate max-w-[200px]">
+                      {fileMeta?.name || 'Document loaded'}
+                    </span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleLoadFile(null); clearAnalysis('document'); }}
+                      className="text-gray-400 hover:text-rose-600 transition-colors p-1"
+                      title="Remove document"
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center p-6 text-center">
+                  <div className="w-16 h-16 rounded-3xl bg-white border border-purple-200 shadow-md flex items-center justify-center mb-3 text-purple-600 hover:scale-105 transition-transform">
+                    <FileSearch size={30} />
+                  </div>
+                  <p className="text-sm font-bold text-[#1E1238] mb-1">Upload Document or ID</p>
+                  <p className="text-xs text-[#5B4E75] max-w-[240px] mb-4">
+                    Supports JPG, PNG, WEBP for forensic tamper & AI-generation screening
+                  </p>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); document.getElementById('doc-file-input')?.click(); }}
+                    className="btn-ghost py-1.5 px-4 text-xs font-bold"
+                  >
+                    <FolderOpen size={13} /> Browse Files
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {previewUrl && (
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => document.getElementById('doc-file-input')?.click()}
+                  className="btn-ghost flex-1 py-2 text-xs font-bold"
+                >
+                  <RefreshCw size={12} /> Replace File
+                </button>
+                <button
+                  onClick={() => { handleLoadFile(null); clearAnalysis('document'); }}
+                  className="btn-danger py-2 px-4 text-xs font-bold"
+                >
+                  <X size={12} /> Clear
+                </button>
+              </div>
+            )}
+
+            <div className="p-3 rounded-2xl bg-purple-50/70 border border-purple-100 text-xs text-[#5B4E75] leading-relaxed">
+              Heuristic forensic checks (error-level analysis, noise consistency,
+              copy-move detection, metadata, C2PA) plus a generic AI-image detector.
+              Not a trained document classifier yet — treat results as a first pass.
+            </div>
           </div>
 
-          {/* Government ID proof-of-concept */}
-          <div className="card">
-            <div className="flex items-center gap-2 mb-3">
-              <IdCard size={13} className="text-text-3" />
-              <span className="label-tag">ID Number Check (Optional)</span>
+          {/* Config Card */}
+          <div className="card space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <IdCard size={15} className="text-purple-700" />
+                <span className="label-tag">ID Number Check (Optional)</span>
+              </div>
             </div>
 
             <div className="space-y-3">
               <div>
-                <label className="text-xs mb-1 block text-text-2">ID Type</label>
+                <label className="text-xs mb-1 block font-semibold text-[#5B4E75]">ID Type</label>
                 <select
                   value={idType}
                   onChange={(e) => { setIdType(e.target.value); setIdNumber(''); }}
@@ -126,8 +300,8 @@ export default function DocumentAnalysis() {
               </div>
 
               {idType && (
-                <div>
-                  <label className="text-xs mb-1 block text-text-2">
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
+                  <label className="text-xs mb-1 block font-semibold text-[#5B4E75]">
                     {ID_TYPES.find((t) => t.value === idType)?.label} Number
                   </label>
                   <input
@@ -137,251 +311,368 @@ export default function DocumentAnalysis() {
                     placeholder={ID_PLACEHOLDERS[idType]}
                     className="field-input text-sm font-mono"
                   />
-                  <p className="text-xs mt-1.5 text-text-3">
+                  <p className="text-xs mt-1.5 text-[#8F81A8]">
                     {idType === 'aadhaar'
                       ? 'Checked against the real Verhoeff checksum UIDAI uses — not a guess.'
                       : 'Checked against the standard format only — no public checksum exists for this ID type.'}
                   </p>
-                </div>
+                </motion.div>
               )}
             </div>
-          </div>
 
-          {/* Reverse image search opt-in */}
-          <div className={`card ${!reverseSearchAvailable ? 'opacity-60' : ''}`}>
-            <label className="flex items-start gap-2.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={reverseSearch}
-                onChange={(e) => setReverseSearch(e.target.checked)}
-                disabled={!reverseSearchAvailable}
-                className="mt-0.5"
-              />
-              <div>
-                <p className="text-sm font-semibold flex items-center gap-1.5 text-text-1">
-                  <Search size={13} />
-                  Reverse Image Search
-                </p>
-                <p className="text-xs mt-0.5 text-text-2">
-                  {reverseSearchAvailable
-                    ? 'Cross-reference this document against the public web (Bing Visual Search). Sends the image to a third-party provider.'
-                    : 'Not configured on this server (needs BING_VISUAL_SEARCH_API_KEY).'}
-                </p>
-              </div>
-            </label>
-          </div>
-
-          {isAnalyzing ? (
-            <div className="space-y-3">
-              <div className="flex gap-2">
-                <button disabled className="btn-primary flex-1 py-3 text-sm">
-                  <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Analyzing...
-                </button>
-                <button onClick={handleCancelRequest} className="btn-danger py-3 px-4 text-sm">
-                  <X size={15} />
-                  Cancel
-                </button>
-              </div>
-              <IndeterminateProgress label="Running forensic checks…" />
-            </div>
-          ) : (
-            <button
-              onClick={handleAnalyze}
-              disabled={!file}
-              className="btn-primary w-full py-3 text-sm"
+            <div
+              className={`p-3.5 rounded-2xl border transition-all ${
+                reverseSearch ? 'bg-cyan-50 border-cyan-300' : 'bg-white/60 border-purple-200/60'
+              } ${!reverseSearchAvailable ? 'opacity-60' : ''}`}
             >
-              <ShieldCheck size={15} />
-              Run Document Analysis
-            </button>
-          )}
-
-          {results?.processing_time_ms != null && (
-            <p className="text-xs text-center text-text-3">
-              Completed in {(results.processing_time_ms / 1000).toFixed(1)}s
-            </p>
-          )}
-        </div>
-
-        {/* Right column: Results panel */}
-        <div className="lg:col-span-2">
-          <div className="card">
-            <div className="flex items-center gap-2 mb-3">
-              <ShieldCheck size={13} className="text-text-3" />
-              <span className="label-tag">Document Review</span>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={reverseSearch}
+                  onChange={(e) => setReverseSearch(e.target.checked)}
+                  disabled={!reverseSearchAvailable}
+                  className="mt-1 w-4 h-4 rounded border-purple-300 text-purple-700 focus:ring-purple-500 cursor-pointer"
+                />
+                <div className="flex-1 text-xs">
+                  <div className="flex items-center gap-1.5 font-bold text-[#1E1238] mb-0.5">
+                    <Search size={13} className="text-cyan-600" />
+                    Reverse Image Search
+                  </div>
+                  <p className="text-[#5B4E75] leading-relaxed">
+                    {reverseSearchAvailable
+                      ? 'Cross-reference against the public web (Bing Visual Search). Sends the image to a third-party provider.'
+                      : 'Requires Bing Visual Search API configuration.'}
+                  </p>
+                </div>
+              </label>
             </div>
 
-            {error ? (
-              <div
-                role="alert"
-                className="p-3 rounded-lg text-sm bg-risk-criticalDim text-risk-critical border border-[rgba(251,113,133,0.20)]"
-              >
-                {error}
-              </div>
-            ) : !results ? (
-              <div className="flex items-center justify-center gap-2 py-8 text-text-3">
-                <ShieldCheck size={16} className="opacity-30" />
-                <p className="text-sm">Upload a document or ID image and run analysis to see results.</p>
+            {isAnalyzing ? (
+              <div className="space-y-3 pt-1">
+                <div className="flex gap-2">
+                  <button disabled className="btn-primary flex-1 py-3 text-xs sm:text-sm font-bold">
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Analyzing Document...
+                  </button>
+                  <button onClick={handleCancelRequest} className="btn-danger py-3 px-4 text-xs font-bold">
+                    <X size={15} /> Cancel
+                  </button>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-white border border-purple-200 space-y-2 shadow-sm">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-purple-700 flex items-center gap-1.5 font-bold">
+                      <Sparkles size={13} className="animate-spin text-purple-600" />
+                      {SCAN_STEPS[scanStepIndex]}
+                    </span>
+                    <span className="text-[10px] font-mono text-purple-500 font-bold">STEP {scanStepIndex + 1}/4</span>
+                  </div>
+                  <div className="progress-indeterminate-track" />
+                </div>
               </div>
             ) : (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
-                <div className="flex flex-col items-center">
-                  <RiskGauge percentage={results.risk_percent} />
+              <button
+                onClick={handleAnalyze}
+                disabled={!file}
+                className="btn-primary w-full py-3.5 text-sm font-bold shadow-md shadow-purple-900/20"
+              >
+                <ShieldCheck size={18} />
+                Run Document Analysis
+              </button>
+            )}
 
-                  <div className="flex flex-wrap justify-center gap-4 mt-2">
-                    {results.confidence && (
-                      <span className="text-xs text-text-2">
-                        Confidence: <strong className="text-text-1">{results.confidence}</strong>
+            {results?.processing_time_ms != null && (
+              <div className="flex items-center justify-center gap-1.5 text-xs text-[#8F81A8]">
+                <Clock size={12} />
+                Completed in{' '}
+                <span className="font-mono text-purple-900 font-bold">
+                  {(results.processing_time_ms / 1000).toFixed(2)}s
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Column: Results Hub (7 cols) */}
+        <div className="lg:col-span-7 space-y-5">
+          {error ? (
+            <div className="card p-6 border-rose-200 bg-rose-50/70 space-y-3">
+              <div className="flex items-center gap-2 text-rose-700 font-bold">
+                <ShieldAlert size={20} />
+                <h3>Document Analysis Error</h3>
+              </div>
+              <p className="text-xs sm:text-sm text-rose-900 leading-relaxed">{error}</p>
+              <button onClick={handleAnalyze} className="btn-primary py-2 px-4 text-xs font-bold mt-2">
+                Retry Scan
+              </button>
+            </div>
+          ) : !results ? (
+            <div className="card p-8 min-h-[480px] flex flex-col items-center justify-center text-center relative overflow-hidden">
+              <div className="max-w-md space-y-5 relative z-10">
+                <div className="flex items-center justify-center">
+                  <SnakeLoader
+                    width={9}
+                    speed={90}
+                    playing={isAnalyzing}
+                    snakeColor="#6D28D9"
+                    appleColor="#EC4899"
+                    className="gap-[3px]"
+                    dotClassName="size-2 rounded-[2px]"
+                  />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-[#1E1238]">
+                    {isAnalyzing ? 'Scanning Document Forensics…' : 'Document Forensics Station Ready'}
+                  </h3>
+                  <p className="text-xs sm:text-sm text-[#5B4E75] mt-1.5 leading-relaxed">
+                    Upload an ID, receipt, or certificate to check for AI generation, digital
+                    tampering, and provenance credentials.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-3 pt-2 text-left">
+                  <div className="p-3.5 rounded-2xl bg-white border border-purple-100 shadow-sm">
+                    <div className="text-xs font-bold text-purple-700 mb-1 flex items-center gap-1">
+                      <ScanLine size={13} /> ELA & Copy-Move
+                    </div>
+                    <p className="text-[11px] text-[#5B4E75]">
+                      Classical forensic detection of splices and recompression seams.
+                    </p>
+                  </div>
+                  <div className="p-3.5 rounded-2xl bg-white border border-purple-100 shadow-sm">
+                    <div className="text-xs font-bold text-cyan-600 mb-1 flex items-center gap-1">
+                      <Fingerprint size={13} /> ID Checksum
+                    </div>
+                    <p className="text-[11px] text-[#5B4E75]">
+                      Real Verhoeff checksum validation for Aadhaar numbers.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+              {/* Verdict Banner */}
+              <div className={`card p-6 border relative overflow-hidden ${verdictStyle.border} ${verdictStyle.bg} ${verdictStyle.shadow}`}>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="label-tag text-[10px]">Document Classification</span>
+                      <span
+                        className="text-[10px] font-mono px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider"
+                        style={{
+                          color: getRiskColorRaw(results.risk_percent),
+                          backgroundColor: `${getRiskColorRaw(results.risk_percent)}15`,
+                          border: `1px solid ${getRiskColorRaw(results.risk_percent)}30`,
+                        }}
+                      >
+                        {getRiskLevel(results.risk_percent)}
                       </span>
-                    )}
-                    {results.primary_finding && (
-                      <span className="text-xs text-text-2">
-                        Finding: <strong className="text-text-1">{results.primary_finding}</strong>
-                      </span>
-                    )}
+                    </div>
+                    <h2 className="text-2xl sm:text-3xl font-black font-display tracking-tight text-[#1E1238] flex items-center gap-2.5">
+                      <VerdictIcon className={`${verdictStyle.iconColor} flex-shrink-0`} size={30} />
+                      {results.verdict}
+                    </h2>
+                    <p className="text-xs sm:text-sm text-[#5B4E75] leading-relaxed max-w-xl">
+                      {results.primary_finding || 'Combined classical-forensic and neural classification.'}
+                    </p>
+                  </div>
+
+                  {results.verdict && results.verdict !== 'AUTHENTIC' && (
+                    <button
+                      onClick={() => setComplaintOpen(true)}
+                      className="btn-danger py-2.5 px-5 text-xs font-bold flex items-center gap-1.5 shadow-md flex-shrink-0"
+                    >
+                      <ShieldAlert size={14} /> Report Cyber Crime
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Gauge & Confidence */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="card p-4 flex flex-col items-center justify-center text-center">
+                  <RiskGauge percentage={results.risk_percent} label="RISK SCORE" size={150} strokeWidth={10} showBadge={true} />
+                </div>
+
+                <div className="card p-4 flex flex-col justify-between">
+                  <div className="flex items-center gap-2 text-[#8F81A8] mb-2">
+                    <Fingerprint size={14} className="text-purple-700" />
+                    <span className="label-tag text-[10px]">Confidence</span>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-black font-display text-[#1E1238]">
+                      {results.confidence || 'MEDIUM'}
+                    </div>
+                    <p className="text-xs text-[#5B4E75] mt-1">
+                      Combined classical-forensic and neural signal strength.
+                    </p>
                   </div>
                 </div>
 
-                {checkEntries.length > 0 && (
-                  <div className="space-y-2">
-                    <span className="label-tag mb-1 block">Visual Analysis</span>
-                    {checkEntries.map(([name, value]) => (
-                      <CheckBadge key={name} name={name} value={value} />
+                <div className="card p-4 flex flex-col justify-between">
+                  <div className="flex items-center gap-2 text-[#8F81A8] mb-2">
+                    <ScanLine size={14} className="text-cyan-600" />
+                    <span className="label-tag text-[10px]">Signals</span>
+                  </div>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-[#8F81A8]">AI-generated</span>
+                      <span className="font-mono text-[#1E1238] font-bold">{((results.ai_generated_score || 0) * 100).toFixed(0)}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[#8F81A8]">Manipulated</span>
+                      <span className="font-mono text-[#1E1238] font-bold">{((results.manipulation_score || 0) * 100).toFixed(0)}%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Visual Checks Grid */}
+              {checkEntries.length > 0 && (
+                <div className="card p-5 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <ScanLine size={14} className="text-purple-700" />
+                    <span className="label-tag">Visual Analysis</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {checkEntries.map(([name, value], i) => (
+                      <CheckBadge key={name} name={name} value={value} index={i} />
                     ))}
                   </div>
-                )}
+                </div>
+              )}
 
-                {results.id_validation && (
-                  <div
-                    className={`p-3 rounded-lg border text-sm ${
-                      results.id_validation.valid
-                        ? 'bg-risk-clearDim border-[rgba(34,197,94,0.15)]'
-                        : 'bg-risk-cautionDim border-[rgba(250,204,21,0.15)]'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      {results.id_validation.valid
-                        ? <Check size={13} className="text-risk-clear" />
-                        : <AlertTriangle size={13} className="text-risk-caution" />}
-                      <span className="font-semibold text-text-1">
-                        {results.id_validation.id_label} Number: {results.id_validation.valid ? 'Valid' : 'Invalid'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-text-2 leading-relaxed">
-                      {results.id_validation.reason}
-                    </p>
+              {/* ID Validation */}
+              {results.id_validation && (
+                <div
+                  className={`card p-4 border text-sm ${
+                    results.id_validation.valid ? 'bg-emerald-50/70 border-emerald-200' : 'bg-amber-50/70 border-amber-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    {results.id_validation.valid
+                      ? <Check size={14} className="text-emerald-600" />
+                      : <AlertTriangle size={14} className="text-amber-600" />}
+                    <span className="font-bold text-[#1E1238]">
+                      {results.id_validation.id_label} Number: {results.id_validation.valid ? 'Valid' : 'Invalid'}
+                    </span>
                   </div>
-                )}
+                  <p className="text-xs text-[#5B4E75] leading-relaxed pl-6">{results.id_validation.reason}</p>
+                </div>
+              )}
 
-                {results.c2pa && (
-                  <div
-                    className={`p-3 rounded-lg border text-sm ${
-                      results.c2pa.ai_generated_signal
-                        ? 'bg-risk-criticalDim border-[rgba(251,113,133,0.20)]'
-                        : results.c2pa.validation_state === 'Invalid'
-                        ? 'bg-risk-cautionDim border-[rgba(250,204,21,0.15)]'
-                        : results.c2pa.valid
-                        ? 'bg-risk-clearDim border-[rgba(34,197,94,0.15)]'
-                        : 'bg-bg-inset border-border-dim'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      {results.c2pa.ai_generated_signal || results.c2pa.validation_state === 'Invalid' ? (
-                        <AlertTriangle size={13} className={results.c2pa.ai_generated_signal ? 'text-risk-critical' : 'text-risk-caution'} />
-                      ) : (
-                        <Check size={13} className="text-risk-clear" />
-                      )}
-                      <span className="font-semibold text-text-1">
-                        C2PA Content Credentials:{' '}
-                        {results.c2pa.ai_generated_signal
-                          ? 'AI generation declared'
-                          : results.c2pa.validation_state === 'Invalid'
-                          ? 'Tampered'
-                          : results.c2pa.valid
-                          ? 'Verified'
-                          : 'Present, unverified'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-text-2 leading-relaxed">
-                      {results.c2pa.ai_generated_signal
-                        ? 'The embedded manifest itself declares this content was produced by a generative AI tool (digitalSourceType: trainedAlgorithmicMedia).'
-                        : results.c2pa.validation_state === 'Invalid'
-                        ? 'A C2PA manifest is present but its signature failed validation — the provenance chain was altered after signing.'
-                        : results.c2pa.valid
-                        ? 'A signed, valid provenance chain was found with no AI-generation declaration.'
-                        : 'A C2PA manifest is present but could not be fully validated.'}
-                      {results.c2pa.generator && <> Generator: <strong>{results.c2pa.generator}</strong>.</>}
-                    </p>
-                  </div>
-                )}
-
-                <VerdictCard verdict={results.verdict} riskScore={results.risk_percent} />
-
-                {results.verdict && results.verdict !== 'AUTHENTIC' && (
-                  <button
-                    onClick={() => setComplaintOpen(true)}
-                    className="btn-danger w-full py-2.5 text-sm"
-                  >
-                    <ShieldAlert size={15} />
-                    Raise Cyber Crime Complaint
-                  </button>
-                )}
-
-                {results.evidence?.ela_map && (
-                  <div>
-                    <span className="label-tag mb-2 block">Error Level Analysis (Evidence)</span>
-                    <img
-                      src={results.evidence.ela_map}
-                      alt="Error level analysis heatmap"
-                      className="w-full rounded-lg border border-border-dim"
-                    />
-                  </div>
-                )}
-
-                {results.reverse_search?.available && (
-                  <div className="p-3 rounded-lg bg-bg-inset border border-border-dim">
-                    <span className="label-tag mb-1.5 block">Reverse Image Search</span>
-                    {results.reverse_search.error ? (
-                      <p className="text-xs text-text-3">Lookup failed: {results.reverse_search.error}</p>
-                    ) : results.reverse_search.match_count === 0 ? (
-                      <p className="text-xs text-text-3">No matching pages found on the public web.</p>
+              {/* C2PA */}
+              {results.c2pa && (
+                <div
+                  className={`card p-4 border text-sm ${
+                    results.c2pa.ai_generated_signal
+                      ? 'bg-rose-50/70 border-rose-200'
+                      : results.c2pa.validation_state === 'Invalid'
+                      ? 'bg-amber-50/70 border-amber-200'
+                      : results.c2pa.valid
+                      ? 'bg-emerald-50/70 border-emerald-200'
+                      : 'bg-purple-50/60 border-purple-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    {results.c2pa.ai_generated_signal || results.c2pa.validation_state === 'Invalid' ? (
+                      <AlertTriangle size={14} className={results.c2pa.ai_generated_signal ? 'text-rose-600' : 'text-amber-600'} />
                     ) : (
-                      <>
-                        <p className="text-xs mb-2 text-text-2">
-                          Found {results.reverse_search.match_count} page(s) hosting this or a visually similar image:
-                        </p>
-                        <ul className="text-sm space-y-1">
-                          {results.reverse_search.matches.map((m, i) => (
-                            <li key={i} className="truncate">
-                              <a
-                                href={m.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-accent hover:underline"
-                              >
-                                {m.title || m.host}
-                              </a>
-                            </li>
-                          ))}
-                        </ul>
-                      </>
+                      <Check size={14} className="text-emerald-600" />
                     )}
+                    <span className="font-bold text-[#1E1238]">
+                      C2PA Content Credentials:{' '}
+                      {results.c2pa.ai_generated_signal
+                        ? 'AI generation declared'
+                        : results.c2pa.validation_state === 'Invalid'
+                        ? 'Tampered'
+                        : results.c2pa.valid
+                        ? 'Verified'
+                        : 'Present, unverified'}
+                    </span>
                   </div>
-                )}
+                  <p className="text-xs text-[#5B4E75] leading-relaxed pl-6">
+                    {results.c2pa.ai_generated_signal
+                      ? 'The embedded manifest itself declares this content was produced by a generative AI tool (digitalSourceType: trainedAlgorithmicMedia).'
+                      : results.c2pa.validation_state === 'Invalid'
+                      ? 'A C2PA manifest is present but its signature failed validation — the provenance chain was altered after signing.'
+                      : results.c2pa.valid
+                      ? 'A signed, valid provenance chain was found with no AI-generation declaration.'
+                      : 'A C2PA manifest is present but could not be fully validated.'}
+                    {results.c2pa.generator && <> Generator: <strong>{results.c2pa.generator}</strong>.</>}
+                  </p>
+                </div>
+              )}
 
-                {results.exif?.findings?.length > 0 && (
-                  <div className="p-3 rounded-lg bg-bg-inset border border-border-dim">
-                    <span className="label-tag mb-1.5 block">Metadata Findings</span>
-                    <ul className="text-sm text-text-2 space-y-1 list-disc list-inside">
-                      {results.exif.findings.map((f, i) => (
-                        <li key={i}>{f}</li>
-                      ))}
-                    </ul>
+              {/* ELA Evidence */}
+              {results.evidence?.ela_map && (
+                <div className="card p-5 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <ScanLine size={14} className="text-purple-700" />
+                    <span className="label-tag">Error Level Analysis (Evidence)</span>
                   </div>
-                )}
-              </motion.div>
-            )}
-          </div>
+                  <img
+                    src={results.evidence.ela_map}
+                    alt="Error level analysis heatmap"
+                    className="w-full rounded-2xl border border-purple-100 shadow-sm"
+                  />
+                </div>
+              )}
+
+              {/* Reverse Search */}
+              {results.reverse_search?.available && (
+                <div className="card p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Search size={14} className="text-cyan-600" />
+                      <span className="label-tag">Reverse Image Search</span>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-cyan-700 bg-cyan-100 px-2.5 py-0.5 rounded-full">
+                      {results.reverse_search.match_count || 0} Matches
+                    </span>
+                  </div>
+                  {results.reverse_search.error ? (
+                    <p className="text-xs text-rose-600">Lookup failed: {results.reverse_search.error}</p>
+                  ) : results.reverse_search.match_count === 0 ? (
+                    <div className="p-3 rounded-2xl bg-purple-50/60 border border-purple-100 text-xs text-[#5B4E75]">
+                      No matching pages found on the public web.
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                      {results.reverse_search.matches.map((m, i) => (
+                        <a
+                          key={i}
+                          href={m.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-between p-2.5 rounded-xl bg-white hover:bg-purple-50 border border-purple-100 text-xs transition-all group"
+                        >
+                          <span className="truncate font-semibold text-[#1E1238] max-w-[85%] group-hover:text-purple-700">
+                            {m.title || m.host}
+                          </span>
+                          <ExternalLink size={12} className="text-purple-400 group-hover:text-purple-700 flex-shrink-0" />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* EXIF Findings */}
+              {results.exif?.findings?.length > 0 && (
+                <div className="card p-5 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Fingerprint size={14} className="text-purple-700" />
+                    <span className="label-tag">Metadata Findings</span>
+                  </div>
+                  <ul className="text-sm text-[#5B4E75] space-y-1.5 list-disc list-inside pl-1">
+                    {results.exif.findings.map((f, i) => (
+                      <li key={i}>{f}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </motion.div>
+          )}
         </div>
       </div>
 

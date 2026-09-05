@@ -17,12 +17,14 @@ import {
   Clock,
   Video as VideoIcon,
   BarChart2,
+  Info,
 } from 'lucide-react';
 import { fadeUp } from '../utils/animations';
 import PageHeader from '../components/PageHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ComplaintModal from '../components/ComplaintModal';
 import RiskGauge from '../components/RiskGauge';
+import SnakeLoader from '../components/SnakeLoader';
 import FrameTable from '../components/FrameTable';
 import VideoRiskTimeline from '../components/VideoRiskTimeline';
 import useForensicStore from '../store/useForensicStore';
@@ -40,11 +42,20 @@ const MODES = [
   {
     value: 'fast',
     label: 'Fast CorefakeNet',
-    tag: 'RAPID SCAN',
-    sub: 'Single-pass neural network • Seconds instead of minutes',
+    tag: 'LOWER ACCURACY',
+    sub: 'Single-pass neural network • ~76% validation accuracy — quick screening only, not a final verdict',
     icon: Zap,
+    warn: true,
   },
 ];
+
+// Maps the backend's `fusion_mode` (what actually scored this result) back to
+// the mode label above — used so results/history always report the model
+// that really ran, not just whatever the selector happens to be set to.
+const FUSION_MODE_LABEL = {
+  video_ensemble_7model: 'Full Ensemble',
+  corefakenet_fast: 'Fast CorefakeNet',
+};
 
 const VIDEO_SCAN_STEPS = [
   'Decoding video stream & extracting keyframes...',
@@ -55,8 +66,8 @@ const VIDEO_SCAN_STEPS = [
 
 export default function VideoAnalysis() {
   const [file, setFile] = useState(null);
-  const [fps, setFps] = useState(1);
-  const [aggregation, setAggregation] = useState('weighted_avg');
+  const fps = 1;
+  const aggregation = 'weighted_avg';
   const [mode, setMode] = useState(MODES[0].value);
   const [videoUrl, setVideoUrl] = useState(null);
   const [fileMeta, setFileMeta] = useState(null);
@@ -317,9 +328,13 @@ export default function VideoAnalysis() {
                         </span>
                         <span
                           className={`text-[9px] font-mono px-2 py-0.5 rounded-full font-bold tracking-wider ${
-                            selected
-                              ? 'bg-purple-700 text-white'
-                              : 'bg-purple-100 text-purple-800'
+                            opt.warn
+                              ? selected
+                                ? 'bg-amber-500 text-white'
+                                : 'bg-amber-100 text-amber-800'
+                              : selected
+                                ? 'bg-purple-700 text-white'
+                                : 'bg-purple-100 text-purple-800'
                           }`}
                         >
                           {opt.tag}
@@ -332,46 +347,11 @@ export default function VideoAnalysis() {
               })}
             </div>
 
-            {/* FPS Slider */}
-            <div className="p-3.5 rounded-2xl bg-white border border-purple-100 space-y-2 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[#1E1238]">Sampling Rate</span>
-                <span className="text-xs font-mono font-bold text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-full">
-                  {fps} FPS
-                </span>
-              </div>
-              <input
-                type="range"
-                min="0.5"
-                max="10"
-                step="0.5"
-                value={fps}
-                onChange={(e) => setFps(Number(e.target.value))}
-                className="w-full h-1.5 rounded-full cursor-pointer appearance-none bg-purple-200 [accent-color:#6D28D9]"
-              />
-              <div className="flex justify-between text-[10px] text-[#8F81A8] font-mono font-semibold">
-                <span>0.5 FPS (Fast)</span>
-                <span>5 FPS</span>
-                <span>10 FPS (Dense)</span>
-              </div>
-            </div>
-
-            {/* Aggregation Selector */}
-            <div className="p-3.5 rounded-2xl bg-white border border-purple-100 space-y-1.5 shadow-sm">
-              <label className="text-xs font-bold text-[#1E1238] block">
-                Temporal Risk Aggregation
-              </label>
-              <select
-                value={aggregation}
-                onChange={(e) => setAggregation(e.target.value)}
-                className="field-input text-xs"
-              >
-                <option value="weighted_avg">Attention Weighted Avg (Recommended)</option>
-                <option value="max">Max Peak Risk (Highest suspicious spike)</option>
-                <option value="average">Simple Arithmetic Mean</option>
-                <option value="majority">Majority Vote Consensus</option>
-              </select>
-            </div>
+            <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-[#8F81A8]">
+              <Info size={12} className="mt-0.5 flex-shrink-0 text-purple-400" />
+              Each mode runs a different model — the same video can score differently
+              across modes. This reflects methodology, not an unreliable score.
+            </p>
 
             {/* Run CTA */}
             {isAnalyzing ? (
@@ -426,15 +406,21 @@ export default function VideoAnalysis() {
             /* Futuristic Video Station Empty State */
             <div className="card p-8 min-h-[480px] flex flex-col items-center justify-center text-center relative overflow-hidden">
               <div className="max-w-md space-y-5 relative z-10">
-                <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-purple-700 via-indigo-600 to-pink-500 p-1 mx-auto shadow-xl shadow-purple-500/20">
-                  <div className="w-full h-full rounded-full bg-[#1E1238] flex items-center justify-center text-white">
-                    <Film size={30} className="text-purple-300" />
-                  </div>
+                <div className="flex items-center justify-center">
+                  <SnakeLoader
+                    width={9}
+                    speed={90}
+                    playing={isAnalyzing}
+                    snakeColor="#6D28D9"
+                    appleColor="#EC4899"
+                    className="gap-[3px]"
+                    dotClassName="size-2 rounded-[2px]"
+                  />
                 </div>
 
                 <div>
                   <h3 className="text-lg font-black text-[#1E1238]">
-                    Temporal Deepfake Station Ready
+                    {isAnalyzing ? 'Decoding Temporal Signal…' : 'Temporal Deepfake Station Ready'}
                   </h3>
                   <p className="text-xs sm:text-sm text-[#5B4E75] mt-1.5 leading-relaxed">
                     Upload a video to decode frame streams, calculate temporal consistency curves, and evaluate face-swapping manipulation.
@@ -485,6 +471,22 @@ export default function VideoAnalysis() {
                     >
                       {getRiskLevel(results.risk_percent || 0)}
                     </span>
+                    {results.fusion_mode && (
+                      <span
+                        className={`text-[10px] font-mono px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider border ${
+                          results.fusion_mode === 'corefakenet_fast'
+                            ? 'bg-amber-100 text-amber-800 border-amber-200'
+                            : 'bg-purple-100 text-purple-700 border-purple-200'
+                        }`}
+                        title={
+                          results.fusion_mode === 'corefakenet_fast'
+                            ? 'Fast mode: single lightweight model, ~76% validation accuracy — treat as a quick screen, not a final verdict'
+                            : 'The model pipeline that produced this score'
+                        }
+                      >
+                        Scored via {FUSION_MODE_LABEL[results.fusion_mode] || results.fusion_mode}
+                      </span>
+                    )}
                   </div>
                   <h2 className="text-2xl sm:text-3xl font-black font-display tracking-tight text-[#1E1238] flex items-center gap-2.5">
                     {results.risk_percent > 50 ? (

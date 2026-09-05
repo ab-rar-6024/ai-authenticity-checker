@@ -882,6 +882,7 @@ def analyze_video(
         },
         "video_info": result.get("video_info", {}),
         "aggregation_method": result.get("aggregation_method", aggregation),
+        "fusion_mode": "video_ensemble_7model",
         "processing_time_ms": elapsed_ms,
         "media_type": "video",
     }
