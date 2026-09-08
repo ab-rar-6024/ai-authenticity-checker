@@ -13,4 +13,4 @@ Disallow: /login
 Disallow: /signup
 Disallow: /forgot-password
 
-Sitemap: https://proofyx.vercel.app/sitemap.xml
+Sitemap: https://proofyx.unaux.com/sitemap.xml

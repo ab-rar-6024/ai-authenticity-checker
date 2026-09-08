@@ -19,4 +19,4 @@ ProofyX runs an ensemble of neural network models (Vision Transformer, DINOv2, f
 - Scan tools: /image, /video, /audio, /document, /multimodal
 
 ## Homepage
-https://proofyx.vercel.app/
+https://proofyx.unaux.com/
