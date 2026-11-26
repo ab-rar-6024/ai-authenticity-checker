@@ -16,7 +16,7 @@ short_description: Multimodal AI deepfake, manipulation & forensic verification 
 [![Vite](https://img.shields.io/badge/Vite-5.x-646CFF.svg?style=flat&logo=vite)](https://vitejs.dev)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-EE4C2C.svg?style=flat&logo=pytorch)](https://pytorch.org)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?style=flat&logo=python)](https://python.org)
-[![License](https://img.shields.io/badge/License-Proprietary-red.svg)]()
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > **ProofyX** is an enterprise-grade multimodal artificial intelligence platform engineered to detect synthetic media, manipulated imagery, deepfake videos, cloned or synthesized speech, forged documents, and AI-generated text. It provides end-to-end explainability via Grad-CAM saliency heatmaps, forensic ELA (Error Level Analysis), frequency-domain spectral inspection, and automated legal cybercrime complaint generation with court-admissible evidence documentation.
 
@@ -537,6 +537,6 @@ ruff format .
 
 ## 📄 License & Attribution
 
-ProofyX is proprietary software. All rights reserved.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 Created and maintained by the ProofyX Engineering Team. For licensing inquiries, commercial deployment, or enterprise partnerships, please open an issue or reach out through project support channels.
